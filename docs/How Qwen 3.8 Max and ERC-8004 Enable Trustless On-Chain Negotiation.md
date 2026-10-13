@@ -1,4 +1,4 @@
-**Autonomous Economic Agents on Monad: How Qwen 3.8 Max and ERC-8004 Enable Trustless On-Chain Negotiation**
+# **Autonomous Economic Agents on Monad: How Qwen 3.8 Max and ERC-8004 Enable Trustless On-Chain Negotiation**
 
 **A technical deep-dive into the architecture, design decisions, and real-world value of using Qwen as the reasoning engine for NEGOagent**
 
