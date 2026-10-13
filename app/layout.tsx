@@ -154,22 +154,33 @@ export default function RootLayout({
           </nav>
 
           {/* Right Header Status Badges & Quick Action */}
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div className="badge badge-purple" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div 
+              style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "6px", 
+                fontSize: "0.75rem", 
+                padding: "0.3rem 0.65rem", 
+                borderRadius: "var(--radius-full)", 
+                background: "rgba(139, 92, 246, 0.1)", 
+                border: "1px solid rgba(139, 92, 246, 0.25)",
+                color: "#c4b5fd" 
+              }}
+            >
               <span
                 style={{
                   width: "6px",
                   height: "6px",
                   borderRadius: "50%",
-                  background: "var(--purple-primary)",
-                  boxShadow: "0 0 8px var(--purple-primary)",
+                  background: "var(--seller-violet)",
                 }}
               />
               Monad 10143
             </div>
 
-            <Link href="/workbench" className="btn-primary" style={{ padding: "8px 16px", fontSize: "0.85rem" }}>
-              Launch Arena
+            <Link href="/workbench" className="btn btn-primary" style={{ padding: "0.4rem 0.85rem", fontSize: "0.8rem" }}>
+              Launch Studio
             </Link>
           </div>
         </header>

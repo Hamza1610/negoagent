@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { 
   Zap, 
@@ -15,9 +15,10 @@ import {
   Play, 
   Clock, 
   Layers,
-  Sparkles,
-  Award,
-  ChevronRight
+  ChevronRight,
+  Copy,
+  Check,
+  Power
 } from "lucide-react";
 
 const MONAD_CHAIN_ID = 10143;
@@ -25,19 +26,26 @@ const MONAD_HEX_CHAIN_ID = "0x279f";
 const MONAD_RPC = "https://testnet-rpc.monad.xyz";
 const MONAD_EXPLORER = "https://testnet.monadscan.com";
 
-function getEthereumProvider() {
-  if (typeof window === "undefined") return null;
-  const anyWindow = window as any;
-  if (!anyWindow.ethereum) return null;
+// Demo agent wallet address on Monad Testnet (funded with ~4.8 MON)
+const DEMO_AGENT_ADDRESS = "0x23ee7225F978a99A3a94C11242811deBA369318F";
 
-  // Handle multi-wallet setups (MetaMask, Phantom, Coinbase, Rabby)
-  if (Array.isArray(anyWindow.ethereum.providers)) {
-    const mm = anyWindow.ethereum.providers.find((p: any) => p.isMetaMask && !p.isPhantom);
+function getInjectedProvider() {
+  if (typeof window === "undefined") return null;
+  const anyWin = window as any;
+  if (!anyWin.ethereum) return null;
+
+  // Handle multi-wallet setups (MetaMask, Phantom, Rabby, Coinbase)
+  if (Array.isArray(anyWin.ethereum.providers) && anyWin.ethereum.providers.length > 0) {
+    // Priority: Real MetaMask
+    const mm = anyWin.ethereum.providers.find((p: any) => p.isMetaMask && !p.isPhantom);
     if (mm) return mm;
-    return anyWindow.ethereum.providers[0];
+    // Fallback: Rabby or any other
+    const rabby = anyWin.ethereum.providers.find((p: any) => p.isRabby);
+    if (rabby) return rabby;
+    return anyWin.ethereum.providers[0];
   }
 
-  return anyWindow.ethereum;
+  return anyWin.ethereum;
 }
 
 export default function LiveAppPage() {
@@ -45,7 +53,9 @@ export default function LiveAppPage() {
   const [balance, setBalance] = useState<string | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Live on-chain runner state
   const [isRunningLive, setIsRunningLive] = useState(false);
@@ -57,33 +67,48 @@ export default function LiveAppPage() {
   const reputationRegistry = "0x8004B663056A597Dffe9eCcC1965A193B7388713";
   const negotiationContract = "0x37645e013f972aa79fe452b5763c8ae1c7cbee18";
 
-  // Check if wallet is already connected safely
+  const fetchBalance = useCallback(async (address: string) => {
+    const eth = getInjectedProvider();
+    if (!eth) return;
+    try {
+      const balHex = await eth.request({
+        method: "eth_getBalance",
+        params: [address, "latest"],
+      });
+      if (balHex) {
+        const balWei = parseInt(balHex, 16);
+        setBalance((balWei / 1e18).toFixed(4));
+      }
+    } catch {
+      // Ignore background balance poll failure
+    }
+  }, []);
+
+  // Check if wallet is already connected safely on mount
   useEffect(() => {
-    const eth = getEthereumProvider();
+    const eth = getInjectedProvider();
     if (!eth) return;
 
     eth.request({ method: "eth_accounts" })
       .then((accounts: string[]) => {
         if (accounts && accounts.length > 0) {
           setWalletAddress(accounts[0]);
+          setIsDemoMode(false);
           fetchBalance(accounts[0]);
         }
       })
-      .catch(() => {
-        // Wallet is locked or not yet authorized
-      });
+      .catch(() => {});
 
     eth.request({ method: "eth_chainId" })
       .then((hexChain: string) => {
         if (hexChain) setChainId(parseInt(hexChain, 16));
       })
-      .catch(() => {
-        // Safe to ignore
-      });
+      .catch(() => {});
 
     const handleAccountsChanged = (accounts: string[]) => {
       if (accounts && accounts.length > 0) {
         setWalletAddress(accounts[0]);
+        setIsDemoMode(false);
         fetchBalance(accounts[0]);
       } else {
         setWalletAddress(null);
@@ -92,7 +117,11 @@ export default function LiveAppPage() {
     };
 
     const handleChainChanged = (hexChain: string) => {
-      if (hexChain) setChainId(parseInt(hexChain, 16));
+      if (hexChain) {
+        const id = parseInt(hexChain, 16);
+        setChainId(id);
+        if (walletAddress) fetchBalance(walletAddress);
+      }
     };
 
     if (eth.on) {
@@ -106,43 +135,39 @@ export default function LiveAppPage() {
         eth.removeListener("chainChanged", handleChainChanged);
       }
     };
-  }, []);
-
-  const fetchBalance = async (address: string) => {
-    const eth = getEthereumProvider();
-    if (!eth) return;
-    try {
-      const balHex = await eth.request({
-        method: "eth_getBalance",
-        params: [address, "latest"]
-      });
-      if (balHex) {
-        const balWei = parseInt(balHex, 16);
-        setBalance((balWei / 1e18).toFixed(4));
-      }
-    } catch {
-      // Ignore background balance error
-    }
-  };
+  }, [fetchBalance, walletAddress]);
 
   const connectWallet = async () => {
     setIsConnecting(true);
     setErrorMessage(null);
     try {
-      const eth = getEthereumProvider();
+      const eth = getInjectedProvider();
       if (!eth) {
-        throw new Error("MetaMask or Web3 wallet extension not found in browser.");
-      }
-      const accounts = await eth.request({ method: "eth_requestAccounts" });
-      if (accounts && accounts.length > 0) {
-        setWalletAddress(accounts[0]);
-        await fetchBalance(accounts[0]);
+        throw new Error("No Web3 wallet extension found. Please install MetaMask or use Demo Wallet below.");
       }
 
-      // Check network and switch to Monad Testnet if necessary
-      const currentChain = await eth.request({ method: "eth_chainId" });
-      if (parseInt(currentChain, 16) !== MONAD_CHAIN_ID) {
-        await switchToMonadTestnet();
+      // Step 1: Request accounts
+      const accounts = await eth.request({ method: "eth_requestAccounts" });
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts authorized in your wallet.");
+      }
+
+      const activeAccount = accounts[0];
+      setWalletAddress(activeAccount);
+      setIsDemoMode(false);
+      await fetchBalance(activeAccount);
+
+      // Step 2: Query network and switch if not Monad Testnet
+      try {
+        const currentChainHex = await eth.request({ method: "eth_chainId" });
+        const currentId = parseInt(currentChainHex, 16);
+        setChainId(currentId);
+
+        if (currentId !== MONAD_CHAIN_ID) {
+          await switchToMonadTestnet();
+        }
+      } catch (switchErr: any) {
+        console.warn("Chain switch postponed:", switchErr);
       }
     } catch (err: any) {
       setErrorMessage(err?.message || "Failed to connect wallet.");
@@ -152,16 +177,16 @@ export default function LiveAppPage() {
   };
 
   const switchToMonadTestnet = async () => {
-    const eth = getEthereumProvider();
+    const eth = getInjectedProvider();
     if (!eth) return;
     try {
       await eth.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: MONAD_HEX_CHAIN_ID }]
+        params: [{ chainId: MONAD_HEX_CHAIN_ID }],
       });
       setChainId(MONAD_CHAIN_ID);
     } catch (switchError: any) {
-      if (switchError.code === 4902) {
+      if (switchError.code === 4902 || switchError.data?.originalError?.code === 4902) {
         try {
           await eth.request({
             method: "wallet_addEthereumChain",
@@ -172,21 +197,43 @@ export default function LiveAppPage() {
                 nativeCurrency: {
                   name: "Monad",
                   symbol: "MON",
-                  decimals: 18
+                  decimals: 18,
                 },
                 rpcUrls: [MONAD_RPC],
-                blockExplorerUrls: [MONAD_EXPLORER]
-              }
-            ]
+                blockExplorerUrls: [MONAD_EXPLORER],
+              },
+            ],
           });
           setChainId(MONAD_CHAIN_ID);
         } catch (addError: any) {
-          setErrorMessage(addError?.message || "Failed to add Monad Testnet");
+          setErrorMessage(addError?.message || "Failed to add Monad Testnet to wallet.");
         }
       } else {
-        setErrorMessage(switchError?.message || "Failed to switch chain");
+        setErrorMessage(switchError?.message || "Failed to switch chain to Monad Testnet.");
       }
     }
+  };
+
+  const enableDemoWallet = () => {
+    setWalletAddress(DEMO_AGENT_ADDRESS);
+    setBalance("4.8213");
+    setChainId(MONAD_CHAIN_ID);
+    setIsDemoMode(true);
+    setErrorMessage(null);
+  };
+
+  const disconnectWallet = () => {
+    setWalletAddress(null);
+    setBalance(null);
+    setChainId(null);
+    setIsDemoMode(false);
+  };
+
+  const copyAddress = () => {
+    if (!walletAddress) return;
+    navigator.clipboard.writeText(walletAddress);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   // Trigger live on-chain negotiation run with Qwen 3.8 Max
@@ -194,14 +241,15 @@ export default function LiveAppPage() {
     setIsRunningLive(true);
     setRunLogs([]);
     setRunResult(null);
+    setErrorMessage(null);
 
     try {
       const res = await fetch("/api/onchain/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          itemDescription: "Tier-1 Low-Latency RPC Streaming Endpoint"
-        })
+          itemDescription: "Tier-1 Low-Latency RPC Streaming Endpoint",
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -211,7 +259,7 @@ export default function LiveAppPage() {
         setErrorMessage(data.error || "Execution failed.");
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "Failed to run on-chain negotiation.");
+      setErrorMessage(err.message || "Failed to execute on-chain negotiation.");
     } finally {
       setIsRunningLive(false);
     }
@@ -221,33 +269,32 @@ export default function LiveAppPage() {
 
   return (
     <div className="container" style={{ paddingTop: "2.5rem", paddingBottom: "5rem" }}>
-      {/* Page Header */}
+      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
-            <Link href="/" style={{ color: "var(--neon-cyan)" }}>Home</Link>
+            <Link href="/" style={{ color: "var(--text-secondary)" }}>Home</Link>
             <ChevronRight size={14} />
-            <span>Live On-Chain Arena</span>
+            <span style={{ color: "var(--text-main)" }}>Live On-Chain Arena</span>
           </div>
-          <h1 style={{ fontSize: "2.2rem", fontWeight: 800, margin: 0, display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <Zap color="var(--neon-purple)" size={32} />
+          <h1 style={{ fontSize: "1.8rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <Zap color="var(--seller-violet)" size={24} />
             Live Monad Testnet Arena
           </h1>
-          <p style={{ color: "var(--text-muted)", marginTop: "0.4rem", maxWidth: "680px" }}>
-            Real-time on-chain execution with ERC-8004 identity verification, reputation attestations, and bilateral smart contract settlement on Monad (Chain ID 10143).
+          <p style={{ color: "var(--text-muted)", marginTop: "0.3rem", fontSize: "0.9rem", maxWidth: "680px" }}>
+            Execute real-time smart contracts on Monad Testnet (Chain ID 10143) with ERC-8004 identity tokens, reputation feedback, and bilateral escrow settlement.
           </p>
         </div>
 
-        {/* Faucet Link & Switch */}
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
           <a 
             href="https://testnet.monad.xyz/" 
             target="_blank" 
             rel="noreferrer"
             className="btn btn-secondary"
-            style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+            style={{ fontSize: "0.85rem" }}
           >
-            <Coins size={16} color="var(--neon-amber)" />
+            <Coins size={15} color="var(--status-amber)" />
             Monad Faucet ↗
           </a>
         </div>
@@ -256,65 +303,76 @@ export default function LiveAppPage() {
       {errorMessage && (
         <div 
           style={{ 
-            background: "rgba(244, 63, 94, 0.1)", 
-            border: "1px solid rgba(244, 63, 94, 0.3)", 
+            background: "rgba(244, 63, 94, 0.08)", 
+            border: "1px solid rgba(244, 63, 94, 0.25)", 
             color: "#fb7185", 
             padding: "0.85rem 1.25rem", 
-            borderRadius: "var(--radius-md)", 
+            borderRadius: "var(--radius-sm)", 
             marginBottom: "1.5rem",
             display: "flex",
             alignItems: "center",
             gap: "0.75rem"
           }}
         >
-          <AlertCircle size={20} />
-          <span style={{ fontSize: "0.9rem" }}>{errorMessage}</span>
+          <AlertCircle size={18} />
+          <span style={{ fontSize: "0.875rem" }}>{errorMessage}</span>
         </div>
       )}
 
-      {/* Web3 Wallet Status Card */}
+      {/* Web3 Wallet Connection Card */}
       <div 
         className="glass-panel" 
         style={{ 
-          padding: "1.5rem", 
-          borderRadius: "var(--radius-lg)", 
+          padding: "1.25rem 1.5rem", 
           marginBottom: "2rem",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: "1.5rem",
-          background: "linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(0, 240, 255, 0.04))"
+          gap: "1.25rem",
+          background: "var(--bg-surface)"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <div 
             style={{ 
-              width: "52px", 
-              height: "52px", 
-              borderRadius: "50%", 
-              background: walletAddress ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.05)",
-              border: `2px solid ${walletAddress ? "var(--neon-emerald)" : "rgba(255, 255, 255, 0.1)"}`,
+              width: "44px", 
+              height: "44px", 
+              borderRadius: "var(--radius-sm)", 
+              background: walletAddress ? "rgba(16, 185, 129, 0.1)" : "rgba(255, 255, 255, 0.04)",
+              border: `1px solid ${walletAddress ? "var(--status-emerald)" : "var(--border-subtle)"}`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center"
             }}
           >
-            <Wallet size={24} color={walletAddress ? "var(--neon-emerald)" : "var(--text-muted)"} />
+            <Wallet size={20} color={walletAddress ? "var(--status-emerald)" : "var(--text-muted)"} />
           </div>
 
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-main)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-main)", fontFamily: "var(--font-mono)" }}>
                 {walletAddress ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` : "No Wallet Connected"}
               </span>
+
+              {walletAddress && (
+                <button 
+                  onClick={copyAddress} 
+                  style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center" }}
+                  title="Copy address"
+                >
+                  {copied ? <Check size={14} color="var(--status-emerald)" /> : <Copy size={14} />}
+                </button>
+              )}
+
               {walletAddress && isMonadChain && (
-                <span style={{ fontSize: "0.75rem", background: "rgba(16, 185, 129, 0.2)", color: "var(--neon-emerald)", padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", fontWeight: 600 }}>
-                  Monad 10143
+                <span style={{ fontSize: "0.7rem", background: "rgba(16, 185, 129, 0.15)", color: "var(--status-emerald)", padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", fontWeight: 600 }}>
+                  {isDemoMode ? "Demo Mode (Monad 10143)" : "Monad 10143 Connected"}
                 </span>
               )}
+
               {walletAddress && !isMonadChain && (
-                <span style={{ fontSize: "0.75rem", background: "rgba(244, 63, 94, 0.2)", color: "#fb7185", padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", fontWeight: 600 }}>
+                <span style={{ fontSize: "0.7rem", background: "rgba(244, 63, 94, 0.15)", color: "#fb7185", padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", fontWeight: 600 }}>
                   Wrong Network
                 </span>
               )}
@@ -322,51 +380,71 @@ export default function LiveAppPage() {
 
             <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
               {walletAddress ? (
-                <>Connected Balance: <strong style={{ color: "var(--neon-cyan)" }}>{balance ?? "..."} MON</strong></>
+                <>Balance: <strong style={{ color: "var(--text-main)", fontFamily: "var(--font-mono)" }}>{balance ?? "..."} MON</strong></>
               ) : (
-                "Connect your MetaMask or Web3 wallet to interact with Monad contracts directly."
+                "Connect MetaMask or use pre-funded Demo Agent Wallet to interact with Monad contracts."
               )}
             </div>
           </div>
         </div>
 
-        <div>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
           {!walletAddress ? (
-            <button 
-              onClick={connectWallet} 
-              disabled={isConnecting}
-              className="btn btn-primary"
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-            >
-              <Wallet size={16} />
-              {isConnecting ? "Connecting..." : "Connect MetaMask"}
-            </button>
+            <>
+              <button 
+                onClick={connectWallet} 
+                disabled={isConnecting}
+                className="btn btn-primary"
+              >
+                <Wallet size={15} />
+                {isConnecting ? "Connecting..." : "Connect MetaMask"}
+              </button>
+
+              <button 
+                onClick={enableDemoWallet} 
+                className="btn btn-secondary"
+                title="Connect pre-funded testnet wallet with ~4.8 MON"
+              >
+                Use Demo Wallet
+              </button>
+            </>
           ) : !isMonadChain ? (
-            <button 
-              onClick={switchToMonadTestnet} 
-              className="btn btn-primary"
-              style={{ background: "var(--neon-purple)", borderColor: "var(--neon-purple)" }}
-            >
-              Switch to Monad Testnet (10143)
-            </button>
+            <>
+              <button 
+                onClick={switchToMonadTestnet} 
+                className="btn btn-primary"
+              >
+                Switch to Monad (10143)
+              </button>
+              <button onClick={disconnectWallet} className="btn btn-secondary" title="Disconnect">
+                <Power size={14} />
+              </button>
+            </>
           ) : (
-            <button 
-              onClick={() => walletAddress && fetchBalance(walletAddress)} 
-              className="btn btn-secondary"
-              style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}
-            >
-              <RefreshCw size={14} /> Refresh Balance
-            </button>
+            <>
+              {!isDemoMode && (
+                <button 
+                  onClick={() => walletAddress && fetchBalance(walletAddress)} 
+                  className="btn btn-secondary"
+                  title="Refresh balance"
+                >
+                  <RefreshCw size={14} /> Refresh
+                </button>
+              )}
+              <button onClick={disconnectWallet} className="btn btn-secondary" title="Disconnect">
+                <Power size={14} /> Disconnect
+              </button>
+            </>
           )}
         </div>
       </div>
 
       {/* Contract Registry Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginBottom: "2.5rem" }}>
-        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-            <ShieldCheck size={18} color="var(--neon-cyan)" />
-            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)" }}>ERC-8004 Identity</span>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-sm)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
+            <ShieldCheck size={16} color="var(--buyer-cyan)" />
+            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-main)" }}>ERC-8004 Identity Registry</span>
           </div>
           <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)", wordBreak: "break-all" }}>
             {identityRegistry}
@@ -375,16 +453,16 @@ export default function LiveAppPage() {
             href={`${MONAD_EXPLORER}/address/${identityRegistry}`} 
             target="_blank" 
             rel="noreferrer"
-            style={{ fontSize: "0.75rem", color: "var(--neon-cyan)", display: "inline-flex", alignItems: "center", gap: "0.25rem", marginTop: "0.5rem" }}
+            style={{ fontSize: "0.75rem", color: "var(--buyer-cyan)", display: "inline-flex", alignItems: "center", gap: "0.25rem", marginTop: "0.4rem" }}
           >
-            Inspect on Monadscan <ExternalLink size={12} />
+            Monadscan Explorer <ExternalLink size={12} />
           </a>
         </div>
 
-        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-            <Award size={18} color="var(--neon-purple)" />
-            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)" }}>Reputation Registry</span>
+        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-sm)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
+            <ShieldCheck size={16} color="var(--seller-violet)" />
+            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-main)" }}>Reputation Registry</span>
           </div>
           <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)", wordBreak: "break-all" }}>
             {reputationRegistry}
@@ -393,16 +471,16 @@ export default function LiveAppPage() {
             href={`${MONAD_EXPLORER}/address/${reputationRegistry}`} 
             target="_blank" 
             rel="noreferrer"
-            style={{ fontSize: "0.75rem", color: "var(--neon-purple)", display: "inline-flex", alignItems: "center", gap: "0.25rem", marginTop: "0.5rem" }}
+            style={{ fontSize: "0.75rem", color: "var(--seller-violet)", display: "inline-flex", alignItems: "center", gap: "0.25rem", marginTop: "0.4rem" }}
           >
-            Inspect on Monadscan <ExternalLink size={12} />
+            Monadscan Explorer <ExternalLink size={12} />
           </a>
         </div>
 
-        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-            <Layers size={18} color="var(--neon-emerald)" />
-            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)" }}>Negotiation.sol Contract</span>
+        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-sm)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.4rem" }}>
+            <Layers size={16} color="var(--status-emerald)" />
+            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-main)" }}>Negotiation.sol Escrow</span>
           </div>
           <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)", wordBreak: "break-all" }}>
             {negotiationContract}
@@ -411,26 +489,26 @@ export default function LiveAppPage() {
             href={`${MONAD_EXPLORER}/address/${negotiationContract}`} 
             target="_blank" 
             rel="noreferrer"
-            style={{ fontSize: "0.75rem", color: "var(--neon-emerald)", display: "inline-flex", alignItems: "center", gap: "0.25rem", marginTop: "0.5rem" }}
+            style={{ fontSize: "0.75rem", color: "var(--status-emerald)", display: "inline-flex", alignItems: "center", gap: "0.25rem", marginTop: "0.4rem" }}
           >
-            Inspect on Monadscan <ExternalLink size={12} />
+            Monadscan Explorer <ExternalLink size={12} />
           </a>
         </div>
       </div>
 
       {/* Main Execution Arena */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "2rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "1.5rem" }}>
         {/* Left Column: Live Run Launcher & Receipts */}
-        <div className="glass-panel" style={{ padding: "2rem", borderRadius: "var(--radius-lg)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-            <h2 style={{ fontSize: "1.4rem", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "0.6rem" }}>
-              <Play size={20} color="var(--neon-cyan)" />
-              Live Qwen 3.8 Max Autonomous On-Chain Run
+        <div className="glass-panel" style={{ padding: "1.75rem", borderRadius: "var(--radius-md)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 600, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Play size={18} color="var(--text-main)" />
+              Live Qwen 3.8 Max On-Chain Execution
             </h2>
           </div>
 
-          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1.6, marginBottom: "1.5rem" }}>
-            Triggers the complete real-time negotiation loop on Monad Testnet using pre-funded backend wallets. Mints ERC-8004 agent identity tokens, reads trust attestations, deploys escrow, conducts multi-turn bargaining via Qwen, and finalizes on-chain settlement.
+          <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", lineHeight: 1.5, marginBottom: "1.5rem" }}>
+            Runs the full autonomous negotiation pipeline on Monad Testnet: verifies ERC-8004 tokens, locks escrow in <code>Negotiation.sol</code>, executes multi-turn Qwen counter-offers, and submits post-settlement reputation feedback.
           </p>
 
           <button
@@ -439,70 +517,66 @@ export default function LiveAppPage() {
             className="btn btn-primary"
             style={{ 
               width: "100%", 
-              padding: "1rem", 
-              fontSize: "1.05rem", 
-              display: "flex", 
-              alignItems: "center", 
-              justifyContent: "center", 
-              gap: "0.75rem",
-              marginBottom: "2rem"
+              padding: "0.75rem", 
+              fontSize: "0.95rem", 
+              marginBottom: "1.75rem"
             }}
           >
             {isRunningLive ? (
               <>
-                <RefreshCw size={20} className="animate-spin" />
-                Executing Monad On-Chain Pipeline (600ms latency)...
+                <RefreshCw size={16} className="animate-spin" />
+                Executing on Monad Testnet (600ms latency)...
               </>
             ) : (
               <>
-                <Zap size={20} />
-                Execute Live Negotiation on Monad
+                <Zap size={16} />
+                Execute On-Chain Negotiation
               </>
             )}
           </button>
 
           {/* Real-Time On-Chain Transaction Log Stream */}
           <div>
-            <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-main)", marginBottom: "1rem" }}>
-              On-Chain Execution Receipts & State Log
+            <h3 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text-main)", marginBottom: "0.75rem" }}>
+              Execution Receipts & State Log
             </h3>
 
             {runLogs.length === 0 && !isRunningLive && (
-              <div style={{ textAlign: "center", padding: "2.5rem 1rem", border: "1px dashed rgba(255, 255, 255, 0.1)", borderRadius: "var(--radius-md)", color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                Click "Execute Live Negotiation on Monad" above to watch real-time transactions confirm on Monad Testnet.
+              <div style={{ textAlign: "center", padding: "2.5rem 1rem", border: "1px dashed var(--border-medium)", borderRadius: "var(--radius-sm)", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                Click "Execute On-Chain Negotiation" to broadcast transactions to Monad Testnet.
               </div>
             )}
 
             {isRunningLive && (
-              <div style={{ textAlign: "center", padding: "2rem", color: "var(--neon-cyan)" }}>
-                <RefreshCw size={28} className="animate-spin" style={{ margin: "0 auto 1rem auto" }} />
-                Submitting transactions and waiting for 600ms Monad block finality...
+              <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-secondary)" }}>
+                <RefreshCw size={24} className="animate-spin" style={{ margin: "0 auto 0.75rem auto", color: "var(--buyer-cyan)" }} />
+                Waiting for sub-second Monad block confirmations...
               </div>
             )}
 
             {runLogs.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                 {runLogs.map((log, i) => (
                   <div 
                     key={i}
                     style={{
-                      background: "rgba(0, 0, 0, 0.35)",
-                      border: "1px solid rgba(255, 255, 255, 0.08)",
-                      borderRadius: "var(--radius-md)",
-                      padding: "1rem",
+                      background: "var(--bg-surface-elevated)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: "0.85rem 1rem",
                       display: "flex",
                       flexDirection: "column",
-                      gap: "0.35rem"
+                      gap: "0.3rem"
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--neon-cyan)" }}>
+                      <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-main)" }}>
                         Step {log.step}: {log.title}
                       </span>
-                      <CheckCircle2 size={16} color="var(--neon-emerald)" />
+                      <CheckCircle2 size={15} color="var(--status-emerald)" />
                     </div>
 
-                    <p style={{ fontSize: "0.85rem", color: "var(--text-main)", margin: 0 }}>
+                    <p style={{ fontSize: "0.825rem", color: "var(--text-secondary)", margin: 0 }}>
                       {log.detail}
                     </p>
 
@@ -511,9 +585,9 @@ export default function LiveAppPage() {
                         href={`${MONAD_EXPLORER}/tx/${log.txHash}`}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ fontSize: "0.75rem", color: "var(--neon-purple)", display: "inline-flex", alignItems: "center", gap: "0.3rem", marginTop: "0.25rem" }}
+                        style={{ fontSize: "0.75rem", color: "var(--buyer-cyan)", display: "inline-flex", alignItems: "center", gap: "0.3rem", marginTop: "0.2rem", fontFamily: "var(--font-mono)" }}
                       >
-                        Tx Hash: {log.txHash.substring(0, 16)}... on Monadscan <ExternalLink size={12} />
+                        Tx: {log.txHash.substring(0, 18)}... on Monadscan <ExternalLink size={11} />
                       </a>
                     )}
                   </div>
@@ -523,56 +597,54 @@ export default function LiveAppPage() {
           </div>
         </div>
 
-        {/* Right Column: Pre-Flight Wallets & Protocol Architecture */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          {/* Pre-funded Agent Wallets */}
-          <div className="glass-panel" style={{ padding: "1.75rem", borderRadius: "var(--radius-lg)" }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <Coins size={18} color="var(--neon-amber)" />
-              Configured Agent Wallets (Monad)
+        {/* Right Column: Pre-Funded Wallets & Architecture */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          <div className="glass-panel" style={{ padding: "1.5rem", borderRadius: "var(--radius-md)" }}>
+            <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <Coins size={16} color="var(--status-amber)" />
+              Backend Agent Wallets (Monad)
             </h3>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "0.85rem 1rem", borderRadius: "var(--radius-sm)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--neon-cyan)" }}>BUYER AGENT (#2291)</span>
-                  <span style={{ fontSize: "0.75rem", color: "var(--neon-emerald)", fontWeight: 600 }}>Active</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div style={{ background: "var(--bg-surface-elevated)", padding: "0.75rem", borderRadius: "var(--radius-sm)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.2rem" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--buyer-cyan)" }}>BUYER AGENT (#2291)</span>
+                  <span style={{ fontSize: "0.7rem", color: "var(--status-emerald)", fontWeight: 500 }}>Funded</span>
                 </div>
                 <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
                   0x23ee7225F978a99A3a94C11242811deBA369318F
                 </div>
-                <div style={{ fontSize: "0.8rem", color: "var(--text-main)", marginTop: "0.3rem" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-main)", marginTop: "0.25rem" }}>
                   Balance: <strong>4.82 MON</strong>
                 </div>
               </div>
 
-              <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "0.85rem 1rem", borderRadius: "var(--radius-sm)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--neon-purple)" }}>SELLER AGENT (#2292)</span>
-                  <span style={{ fontSize: "0.75rem", color: "var(--neon-emerald)", fontWeight: 600 }}>Active</span>
+              <div style={{ background: "var(--bg-surface-elevated)", padding: "0.75rem", borderRadius: "var(--radius-sm)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.2rem" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--seller-violet)" }}>SELLER AGENT (#2292)</span>
+                  <span style={{ fontSize: "0.7rem", color: "var(--status-emerald)", fontWeight: 500 }}>Funded</span>
                 </div>
                 <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
                   0xDf09e28c592771819cD8F4dE9590097292d18F84
                 </div>
-                <div style={{ fontSize: "0.8rem", color: "var(--text-main)", marginTop: "0.3rem" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-main)", marginTop: "0.25rem" }}>
                   Balance: <strong>4.95 MON</strong>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ERC-8004 Standard Verification Note */}
-          <div className="glass-panel" style={{ padding: "1.75rem", borderRadius: "var(--radius-lg)" }}>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <ShieldCheck size={18} color="var(--neon-cyan)" />
-              ERC-8004 Compliance
+          <div className="glass-panel" style={{ padding: "1.5rem", borderRadius: "var(--radius-md)" }}>
+            <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <ShieldCheck size={16} color="var(--buyer-cyan)" />
+              ERC-8004 Verification
             </h3>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.6, margin: 0 }}>
+            <p style={{ fontSize: "0.825rem", color: "var(--text-muted)", lineHeight: 1.5, margin: 0 }}>
               Under ERC-8004, each agent has an autonomous non-fungible identity token minted on Monad. Agents cannot submit feedback on themselves, ensuring verifiable reputation weights across high-frequency bargaining turns.
             </p>
-            <div style={{ marginTop: "1.25rem" }}>
-              <Link href="/workbench" className="btn btn-secondary" style={{ width: "100%", justifyContent: "center" }}>
-                Switch to Simulation Workbench →
+            <div style={{ marginTop: "1rem" }}>
+              <Link href="/workbench" className="btn btn-secondary" style={{ width: "100%", justifyContent: "center", fontSize: "0.85rem" }}>
+                Open Visual Simulation Workbench →
               </Link>
             </div>
           </div>
