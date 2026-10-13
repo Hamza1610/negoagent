@@ -41,7 +41,9 @@ export const logger = {
     console.log(
       `  ${colors.green}⚙ Calling Tool:${colors.reset} ${colors.bold}${toolName}${colors.reset}`
     );
-    console.log(`  ${colors.gray}Params: ${JSON.stringify(args)}${colors.reset}`);
+    console.log(
+      `  ${colors.gray}Params: ${JSON.stringify(args, (_, v) => (typeof v === "bigint" ? v.toString() : v))}${colors.reset}`
+    );
   },
 
   tx(description: string, txHash: string) {

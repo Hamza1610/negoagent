@@ -6,6 +6,12 @@ import * as identityModule from "./tools/identity.js";
 import * as negotiationModule from "./tools/negotiation.js";
 import * as reputationModule from "./tools/reputation.js";
 
+export function safeJsonStringify(data: any): string {
+  return JSON.stringify(data, (_, value) =>
+    typeof value === "bigint" ? value.toString() : value
+  );
+}
+
 export interface ToolExecutionContext {
   walletClient: WalletClient;
   publicClient: PublicClient;
@@ -204,7 +210,7 @@ export async function runAgentTurn(params: {
       messages.push({
         role: "tool",
         tool_call_id: tc.id,
-        content: JSON.stringify(result),
+        content: safeJsonStringify(result),
       });
     }
 

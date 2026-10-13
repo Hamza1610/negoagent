@@ -331,11 +331,11 @@ export async function rejectOffer(
 }
 
 export interface NegotiationState {
-  id: bigint;
+  id: number;
   buyer: `0x${string}`;
   seller: `0x${string}`;
-  buyerAgentId: bigint;
-  sellerAgentId: bigint;
+  buyerAgentId: number;
+  sellerAgentId: number;
   referencePriceMon: string;
   currentOfferMon: string;
   lastOfferer: `0x${string}`;
@@ -371,11 +371,11 @@ export async function getNegotiationState(
     ];
 
     const state: NegotiationState = {
-      id: result[0],
+      id: Number(result[0]),
       buyer: result[1],
       seller: result[2],
-      buyerAgentId: result[3],
-      sellerAgentId: result[4],
+      buyerAgentId: Number(result[3]),
+      sellerAgentId: Number(result[4]),
       referencePriceMon: formatMonAmount(result[5]),
       currentOfferMon: formatMonAmount(result[6]),
       lastOfferer: result[7],
