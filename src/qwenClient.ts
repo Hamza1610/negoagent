@@ -1,8 +1,8 @@
 import OpenAI from "openai";
-import { CONFIG } from "./config.js";
-import { identityToolSchemas } from "./tools/identity.js";
-import { negotiationToolSchemas } from "./tools/negotiation.js";
-import { reputationToolSchemas } from "./tools/reputation.js";
+import { CONFIG } from "./config";
+import { identityToolSchemas } from "./tools/identity";
+import { negotiationToolSchemas } from "./tools/negotiation";
+import { reputationToolSchemas } from "./tools/reputation";
 
 let openaiClient: OpenAI | null = null;
 

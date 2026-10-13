@@ -4,6 +4,9 @@
   "description": "Autonomous negotiation agent driven by Qwen 3.8 Max with ERC-8004 identity and reputation on Monad",
   "main": "dist/index.js",
   "scripts": {
+    "dev": "next dev -p 3000",
+    "build:web": "next build",
+    "start:web": "next start -p 3000",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -24,12 +27,18 @@
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.4.7",
+    "lucide-react": "^1.56.0",
+    "next": "^16.4.0",
     "openai": "^4.86.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "solc": "^0.8.28",
     "viem": "^2.23.4"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.7"

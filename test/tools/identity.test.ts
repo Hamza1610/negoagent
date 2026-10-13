@@ -4,7 +4,7 @@ import {
   parseAgentCardUri,
   AgentCard,
   identityToolSchemas,
-} from "../../src/tools/identity.js";
+} from "../../src/tools/identity";
 
 describe("Identity Tool (TDD Unit Tests)", () => {
   const sampleCard: AgentCard = {

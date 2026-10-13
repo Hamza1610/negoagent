@@ -1,12 +1,12 @@
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
-import { monadTestnet, CONFIG } from "./config.js";
-import { getPublicClient, getWalletClient } from "./utils/viemClient.js";
-import { logger } from "./utils/logger.js";
-import { buildAgentSystemPrompt } from "./qwenClient.js";
-import { runAgentTurn, ToolExecutionContext } from "./agentLoop.js";
-import { registerAgent, getAgentIdentity } from "./tools/identity.js";
-import { getReputationSummary, submitReputationFeedback } from "./tools/reputation.js";
-import { openNegotiation, getNegotiationState } from "./tools/negotiation.js";
+import { monadTestnet, CONFIG } from "./config";
+import { getPublicClient, getWalletClient } from "./utils/viemClient";
+import { logger } from "./utils/logger";
+import { buildAgentSystemPrompt } from "./qwenClient";
+import { runAgentTurn, ToolExecutionContext } from "./agentLoop";
+import { registerAgent, getAgentIdentity } from "./tools/identity";
+import { getReputationSummary, submitReputationFeedback } from "./tools/reputation";
+import { openNegotiation, getNegotiationState } from "./tools/negotiation";
 
 async function main() {
   logger.header("NEGOagent: Qwen 3.8 Max Autonomous Negotiation on Monad");

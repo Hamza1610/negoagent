@@ -6,7 +6,7 @@ import {
   WalletClient,
 } from "viem";
 import { privateKeyToAccount, PrivateKeyAccount } from "viem/accounts";
-import { monadTestnet, CONFIG } from "../config.js";
+import { monadTestnet, CONFIG } from "../config";
 
 let publicClientInstance: PublicClient | null = null;
 

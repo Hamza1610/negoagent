@@ -10,123 +10,175 @@
 
 NEGOagent is a protocol-level agentic framework demonstrating autonomous on-chain economic negotiation. Built on Monad, it pairs frontier LLMs (Qwen 3.8 Max) with the ERC-8004 Trustless Agents standard (Identity and Reputation Registries).
 
-The system enables agents to:
-1. Possess self-sovereign on-chain identity (ERC-721 token IDs via Identity Registry).
-2. Query counterparty on-chain track records prior to engagement.
-3. Conduct multi-turn bilateral bargaining governed by an on-chain state machine (`Negotiation.sol`).
-4. Execute atomic settlement on Monad with sub-second finality.
-5. Publish verifiable reputation feedback to the ERC-8004 Reputation Registry post-settlement.
+The platform operates across two distinct environments:
+1. **Simulation Workbench (`/workbench`):** Sandbox to create, configure, and inspect multiple agents with custom wallets, observe live bargaining turn-by-turn, inspect internal LLM reasoning, and archive cross-agent negotiation transcripts.
+2. **Live On-Chain Arena (`/app`):** Direct Web3 wallet integration on Monad Testnet to mint portable ERC-8004 identity NFTs, initiate deals on `Negotiation.sol`, and write verifiable reputation signals.
 
 ---
 
-## 2. High-Level Architecture
+## Documentation Structure
+
+To maintain modular, high-fidelity documentation, the specifications are categorized as follows:
+* **[docs/ARCHITECTURE.md](file:///c:/Users/HP-PC/Desktop/negoagent/docs/ARCHITECTURE.md):** Master System Architecture, Smart Contracts & Core State Machine.
+* **[docs/UI_SPECIFICATION.md](file:///c:/Users/HP-PC/Desktop/negoagent/docs/UI_SPECIFICATION.md):** Frontend UI/UX, Dual-Mode Flows, `/workbench`, `/app`, and Thought Inspector.
+* **[docs/STORAGE_PLUGINS.md](file:///c:/Users/HP-PC/Desktop/negoagent/docs/STORAGE_PLUGINS.md):** Pluggable Storage Layer, Database Adapter Pattern, and SQL Schemas.
+* **[docs/PRD.md](file:///c:/Users/HP-PC/Desktop/negoagent/docs/PRD.md):** Core Product Requirements & Metrics.
+
+---
+
+## 2. High-Level System Architecture
 
 ```mermaid
 graph TD
-    subgraph Host["NEGOagent Execution Runtime (TypeScript / Node.js)"]
-        subgraph BuyerAgent["Buyer Agent (Qwen 3.8 Max)"]
-            B_LLM["Qwen 3.8 Max Engine<br/>(System Prompt + Goal)"]
-            B_Tools["Buyer Tool Executor<br/>(viem + Buyer Wallet)"]
-            B_LLM <-->|Function Calls & Results| B_Tools
+    subgraph UI["NEGOagent Frontend Application (Next.js / TypeScript)"]
+        Landing["Landing Page (/)<br/>• Value Proposition<br/>• Protocol Specs (ERC-8004 + Monad)<br/>• Interactive Feature Cards"]
+        
+        subgraph Mode1["Mode A: Simulation Workbench (/workbench)"]
+            SimBoard["Agent Board & Sandbox<br/>Create & inspect custom agents"]
+            SimArena["Bargaining Arena<br/>Live turn-by-turn negotiation"]
+            SimThought["LLM Reasoning HUD<br/>Live thoughts & concession math"]
+            SimHistory["Session History<br/>Cross-agent transcript archive"]
         end
 
-        subgraph SellerAgent["Seller Agent (Qwen 3.8 Max)"]
-            S_LLM["Qwen 3.8 Max Engine<br/>(System Prompt + Goal)"]
-            S_Tools["Seller Tool Executor<br/>(viem + Seller Wallet)"]
-            S_LLM <-->|Function Calls & Results| S_Tools
+        subgraph Mode2["Mode B: Live Monad On-Chain (/app)"]
+            WalletCard["Wallet & Faucet Center<br/>MetaMask / Monad Testnet Connect"]
+            IdMint["ERC-8004 Identity Hub<br/>Mint on-chain agent NFT ID"]
+            LiveNeg["Live Dealmaker<br/>Deploy & execute on Negotiation.sol"]
+            RepWrite["Reputation Ledger<br/>Post-deal signed feedback write"]
         end
+    end
 
-        Orchestrator["Agent Orchestrator / Turn Manager"]
-        Orchestrator --- BuyerAgent
-        Orchestrator --- SellerAgent
+    subgraph Storage["Pluggable Storage Layer (Database Plugin)"]
+        PluginRouter["Storage Adapter Interface"]
+        LocalAdapter["Local JSON / SQLite Adapter<br/>(Default, zero-setup)"]
+        CloudAdapter["PostgreSQL / Supabase / Prisma Plugin<br/>(Optional cloud persistence)"]
+        PluginRouter --- LocalAdapter
+        PluginRouter --- CloudAdapter
+    end
+
+    subgraph BackendRuntime["Backend Execution Engine"]
+        QwenRunner["Qwen 3.8 Max Agent Engine<br/>(DashScope / OpenRouter API)"]
+        ViemRelay["Viem Monad Contract Interactor<br/>(Reads/Writes on Monad 10143)"]
     end
 
     subgraph Monad["Monad Testnet (Chain ID: 10143 | ~600ms Finality)"]
-        subgraph ERC8004["ERC-8004 Registries"]
-            ID_REG["Identity Registry<br/>(0x8004A818BFB912233c491871b3d84c89A494BD9e)<br/>ERC-721 Agent Identities"]
-            REP_REG["Reputation Registry<br/>(0x8004B663056A597Dffe9eCcC1965A193B7388713)<br/>Signed Feedback Signals"]
-        end
-
-        subgraph CoreContract["Bilateral Settlement Contract"]
-            NEG_CONTRACT["Negotiation.sol<br/>State Machine & Escrow"]
-        end
+        ID_REG["ERC-8004 Identity Registry<br/>(0x8004A818BFB912233c491871b3d84c89A494BD9e)"]
+        REP_REG["ERC-8004 Reputation Registry<br/>(0x8004B663056A597Dffe9eCcC1965A193B7388713)"]
+        NEG_CONTRACT["Negotiation.sol<br/>Bilateral State Machine"]
     end
 
-    B_Tools -->|Register Identity| ID_REG
-    S_Tools -->|Register Identity| ID_REG
-    B_Tools -->|Read Reputation| REP_REG
-    S_Tools -->|Read Reputation| REP_REG
-    B_Tools -->|Open / Counter / Settle| NEG_CONTRACT
-    S_Tools -->|Counter / Accept / Settle| NEG_CONTRACT
-    B_Tools -->|Give Feedback for Seller| REP_REG
-    S_Tools -->|Give Feedback for Buyer| REP_REG
+    Landing --> Mode1
+    Landing --> Mode2
+    SimBoard <--> Storage
+    SimHistory <--> Storage
+    SimArena <--> QwenRunner
+    QwenRunner <--> ViemRelay
+    LiveNeg <--> ViemRelay
+    IdMint <--> ViemRelay
+    RepWrite <--> ViemRelay
+    ViemRelay <--> Monad
 ```
 
 ---
 
-## 3. End-to-End Interaction Flow
+## 3. User Journey & Dual-Mode Interaction Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Observer as Observer / Runtime CLI
-    participant Buyer as Buyer Agent (Qwen)
-    participant Seller as Seller Agent (Qwen)
-    participant IdReg as ERC-8004 IdentityRegistry
-    participant Neg as Negotiation.sol
-    participant RepReg as ERC-8004 ReputationRegistry
+    actor User as User / Evaluator
+    participant UI as NEGOagent UI
+    participant Storage as Pluggable Storage Layer
+    participant LLM as Qwen 3.8 Max Engine
+    participant Chain as Monad Testnet (ERC-8004)
 
-    Observer->>Buyer: Initialize Session
-    Observer->>Seller: Initialize Session
+    User->>UI: Lands on Home Page (/)
+    UI-->>User: Views interactive protocol explainer & feature cards
 
-    rect rgb(235, 245, 255)
-        note over Buyer,IdReg: Stage 1: Identity Discovery & Verification
-        Buyer->>IdReg: register(agentURI) -> Mint AgentId #A
-        Seller->>IdReg: register(agentURI) -> Mint AgentId #B
-        Buyer->>RepReg: getSummary(AgentId #B) -> Query Track Record
-        Seller->>RepReg: getSummary(AgentId #A) -> Query Track Record
-    end
-
-    rect rgb(240, 255, 240)
-        note over Buyer,Neg: Stage 2: Bilateral Negotiation State Machine
-        Buyer->>Neg: openNegotiation(seller, buyerId, sellerId, refPrice)
-        Neg-->>Buyer: NegotiationOpened Event
-
-        loop Multi-Round Bargaining (Until Acceptance or Expiry)
-            Buyer->>Buyer: Qwen analyzes context & submits offer
-            Buyer->>Neg: makeOffer(negotiationId, amount)
-            Neg-->>Seller: OfferSubmitted Event
-
-            Seller->>Seller: Qwen evaluates reservation margin
-            alt Accepts offer
-                Seller->>Neg: acceptOffer(negotiationId)
-                Neg-->>Neg: State -> Settled
-                Neg-->>Buyer: NegotiationSettled Event
-                Neg-->>Seller: NegotiationSettled Event
-            else Counters offer
-                Seller->>Neg: makeOffer(negotiationId, counterAmount)
-                Neg-->>Buyer: OfferSubmitted Event
-            else Rejects / Terminates
-                Seller->>Neg: rejectOffer(negotiationId)
-                Neg-->>Neg: State -> Rejected
-            end
+    alt Mode A: Simulation Workbench (/workbench)
+        User->>UI: Creates or configures Agent A & Agent B
+        UI->>Storage: Persists agent configs (name, strategy, budget)
+        User->>UI: Pairs agents & clicks "Launch Simulation"
+        loop Each Negotiation Turn
+            UI->>LLM: Requests strategic move with current on-chain state
+            LLM-->>UI: Emits "Internal Thought / Reasoning"
+            UI-->>User: Displays animated Thought HUD (concession math)
+            LLM-->>UI: Emits Tool Call (make_offer / accept_offer)
+            UI-->>User: Updates on-chain status & dynamic offer graph
         end
-    end
+        UI->>Storage: Archives session transcript & settlement metrics
+        UI-->>User: Displays Settlement Modal + ERC-8004 Reputation Log
 
-    rect rgb(255, 245, 235)
-        note over Buyer,RepReg: Stage 3: Post-Settlement Reputation Signals
-        Buyer->>RepReg: giveFeedback(target: AgentId #B, value: +100, tag: "deal_settled")
-        Seller->>RepReg: giveFeedback(target: AgentId #A, value: +100, tag: "deal_settled")
+    else Mode B: Live Monad On-Chain Mode (/app)
+        User->>UI: Connects Web3 Wallet (MetaMask on Monad Testnet)
+        UI-->>User: Displays MON balance + Faucet link
+        User->>UI: Mints ERC-8004 Identity token on Monad
+        UI->>Chain: Executes IdentityRegistry.register()
+        Chain-->>UI: Confirmed (Agent ID # minted)
+        User->>UI: Opens live negotiation against counterparty
+        UI->>Chain: Executes Negotiation.sol contract calls
+        Chain-->>UI: Real Monad tx hashes + sub-second block receipts
+        User->>UI: Submits reciprocal feedback to ReputationRegistry.sol
+        Chain-->>UI: Verified reputation score updated on-chain
     end
-
-    Buyer-->>Observer: Export Verified Transcript with Monadscan Hashes
 ```
 
 ---
 
-## 4. Negotiation State Machine
+## 4. Pluggable Storage Architecture (Database Plugin Pattern)
 
-The contract `Negotiation.sol` enforces valid transitions between states:
+To allow total flexibility across local demos, offline testing, and cloud deployments, NEGOagent implements an extensible repository interface:
+
+```mermaid
+classDiagram
+    class StorageAdapter {
+        <<interface>>
+        +getAgents() Promise~AgentProfile[]~
+        +getAgentById(id) Promise~AgentProfile~
+        +saveAgent(agent) Promise~void~
+        +deleteAgent(id) Promise~void~
+        +getSessions() Promise~SessionRecord[]~
+        +getSessionById(id) Promise~SessionRecord~
+        +saveSession(session) Promise~void~
+        +getTranscripts(sessionId) Promise~TranscriptMessage[]~
+        +appendMessage(sessionId, message) Promise~void~
+    }
+
+    class LocalStorageAdapter {
+        -filePath: string
+        +getAgents()
+        +saveAgent()
+        +getSessions()
+        +saveSession()
+    }
+
+    class PostgreSQLAdapter {
+        -connectionString: string
+        +getAgents()
+        +saveAgent()
+        +getSessions()
+        +saveSession()
+    }
+
+    class BrowserIndexedDBAdapter {
+        -dbName: string
+        +getAgents()
+        +saveAgent()
+        +getSessions()
+        +saveSession()
+    }
+
+    StorageAdapter <|.. LocalStorageAdapter : Default Zero-Setup
+    StorageAdapter <|.. PostgreSQLAdapter : Enterprise Cloud
+    StorageAdapter <|.. BrowserIndexedDBAdapter : Client-Side Fast
+```
+
+* **Default (Out-of-the-Box):** `LocalStorageAdapter` writes to local structured JSON/SQLite files (`data/agents.json`, `data/sessions.json`). No external database installation or setup required.
+* **Extensible Plugins:** Developers can swap in PostgreSQL, Supabase, or MongoDB simply by providing environment variables (`STORAGE_TYPE=postgres`, `DATABASE_URL=...`).
+
+---
+
+## 5. Negotiation State Machine (`Negotiation.sol`)
 
 ```mermaid
 stateDiagram-v2
@@ -149,36 +201,11 @@ stateDiagram-v2
 
 ---
 
-## 5. Agent Decision & Tool Execution Flow
-
-```mermaid
-flowchart TD
-    Start(["Turn Initiated"]) --> ReadChain["Read Monad State via viem<br/>(get_negotiation_state)"]
-    ReadChain --> BuildPrompt["Format Context Window<br/>• Terms & history<br/>• Reservation parameters<br/>• Counterparty reputation score"]
-    BuildPrompt --> CallModel["Invoke Qwen 3.8 Max<br/>(OpenAI Function-Calling Format)"]
-    
-    CallModel --> ParseChoice{"Model Output"}
-    ParseChoice -->|"make_offer(amount)"| SendOffer["Submit Transaction: Negotiation.makeOffer()"]
-    ParseChoice -->|"accept_offer()"| SendAccept["Submit Transaction: Negotiation.acceptOffer()"]
-    ParseChoice -->|"reject_offer()"| SendReject["Submit Transaction: Negotiation.rejectOffer()"]
-    
-    SendOffer --> ConfirmTx["Wait for Block Inclusion (~600ms)"]
-    SendAccept --> ConfirmTx
-    SendReject --> ConfirmTx
-    
-    ConfirmTx --> CheckComplete{"Negotiation Terminated?"}
-    CheckComplete -->|No| NextActor(["Yield Turn to Counterparty"])
-    CheckComplete -->|Yes & Settled| SubmitRep["Execute submit_reputation_feedback()"]
-    SubmitRep --> Finish(["Turn Complete"])
-```
-
----
-
 ## 6. Directory Structure
 
 ```
 negoagent/
-├── README.md                      # Primary project guide & evaluation criteria
+├── README.md                      # Primary project guide
 ├── package.json                   # Dependencies & scripts
 ├── tsconfig.json                  # TypeScript compiler options
 ├── vitest.config.ts               # Test runner configuration (TDD)
@@ -195,6 +222,10 @@ negoagent/
 │   ├── config.ts                  # Constants, chain configuration, addresses
 │   ├── qwenClient.ts              # Qwen 3.8 Max model wrapper with retry logic
 │   ├── agentLoop.ts               # Autonomous multi-turn tool-calling loop
+│   ├── storage/                   # Pluggable Storage Layer
+│   │   ├── adapter.ts             # StorageAdapter interface
+│   │   ├── localAdapter.ts        # Default local JSON/file implementation
+│   │   └── index.ts               # Plugin resolver factory
 │   ├── tools/
 │   │   ├── identity.ts            # ERC-8004 Identity Registry tools
 │   │   ├── negotiation.ts         # On-chain negotiation tools
@@ -202,16 +233,16 @@ negoagent/
 │   └── utils/
 │       ├── viemClient.ts          # Monad RPC & wallet client management
 │       └── logger.ts              # Formatted observability & tx logger
-├── scripts/
-│   ├── deployNegotiation.ts       # Deployment script for Monad Testnet
-│   └── fundWallets.ts             # Wallet balance & faucet helper
-├── test/
-│   ├── tools/
-│   │   ├── identity.test.ts       # Identity registration & query tests
-│   │   ├── negotiation.test.ts    # Contract interaction & tool tests
-│   │   └── reputation.test.ts     # Feedback submission & query tests
-│   ├── agentLoop.test.ts          # Agent loop & tool dispatcher unit tests
-│   └── qwenClient.test.ts         # Tool schema & prompt formatting tests
+├── web/                           # Next.js 14+ UI Application
+│   ├── app/
+│   │   ├── page.tsx               # Landing Page
+│   │   ├── workbench/             # Simulation Workbench
+│   │   │   ├── page.tsx           # Bargaining Arena & Live HUD
+│   │   │   ├── agents/page.tsx    # Agent Management & Creator
+│   │   │   └── history/page.tsx   # Cross-agent transcripts archive
+│   │   └── app/page.tsx           # Live Monad On-Chain Mode
+│   └── components/                # UI design system components
+├── test/                          # 100% Green TDD Test Suite (Vitest)
 └── demo/
     └── transcript-example.md      # Reference transcript with Monadscan tx links
 ```

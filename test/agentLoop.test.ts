@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { executeAgentTool, ToolExecutionContext } from "../src/agentLoop.js";
+import { executeAgentTool, ToolExecutionContext } from "../src/agentLoop";
 
 describe("Agent Tool Dispatcher & Execution Loop (TDD Unit Tests)", () => {
   it("should dispatch make_offer tool call to negotiation executor", async () => {

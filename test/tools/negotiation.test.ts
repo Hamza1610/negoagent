@@ -4,7 +4,7 @@ import {
   decodeNegotiationStatus,
   formatMonAmount,
   parseMonAmount,
-} from "../../src/tools/negotiation.js";
+} from "../../src/tools/negotiation";
 
 describe("Negotiation Tool (TDD Unit Tests)", () => {
   it("should correctly decode numeric status to human-readable strings", () => {

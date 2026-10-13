@@ -3,7 +3,7 @@ import {
   getAllAgentTools,
   buildAgentSystemPrompt,
   parseToolCallArguments,
-} from "../src/qwenClient.js";
+} from "../src/qwenClient";
 
 describe("Qwen 3.8 Max Client & Prompt Engine (TDD Unit Tests)", () => {
   it("should compile all 8 required tools into OpenAI function calling format", () => {

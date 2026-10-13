@@ -1,10 +1,10 @@
 import { PublicClient, WalletClient } from "viem";
-import { getQwenClient, getAllAgentTools, parseToolCallArguments } from "./qwenClient.js";
-import { CONFIG } from "./config.js";
-import { logger } from "./utils/logger.js";
-import * as identityModule from "./tools/identity.js";
-import * as negotiationModule from "./tools/negotiation.js";
-import * as reputationModule from "./tools/reputation.js";
+import { getQwenClient, getAllAgentTools, parseToolCallArguments } from "./qwenClient";
+import { CONFIG } from "./config";
+import { logger } from "./utils/logger";
+import * as identityModule from "./tools/identity";
+import * as negotiationModule from "./tools/negotiation";
+import * as reputationModule from "./tools/reputation";
 
 export function safeJsonStringify(data: any): string {
   return JSON.stringify(data, (_, value) =>

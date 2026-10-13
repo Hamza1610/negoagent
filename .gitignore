@@ -16,6 +16,8 @@ pnpm-debug.log*
 dist/
 out/
 build/
+.next/
+data/
 coverage/
 .nyc_output/
 

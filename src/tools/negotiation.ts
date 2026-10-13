@@ -7,7 +7,7 @@ import {
   formatEther,
   decodeEventLog,
 } from "viem";
-import { CONFIG } from "../config.js";
+import { CONFIG } from "../config";
 
 const negotiationAbiPath = path.resolve(process.cwd(), "abis", "Negotiation.json");
 const negotiationAbi = JSON.parse(fs.readFileSync(negotiationAbiPath, "utf8"));

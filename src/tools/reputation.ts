@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { PublicClient, WalletClient, toHex } from "viem";
-import { CONFIG } from "../config.js";
+import { CONFIG } from "../config";
 
 const reputationAbiPath = path.resolve(process.cwd(), "abis", "ReputationRegistry.json");
 const reputationAbi = JSON.parse(fs.readFileSync(reputationAbiPath, "utf8"));

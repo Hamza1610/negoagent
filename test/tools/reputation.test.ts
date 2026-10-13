@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   reputationToolSchemas,
   formatReputationScore,
-} from "../../src/tools/reputation.js";
+} from "../../src/tools/reputation";
 
 describe("Reputation Tool (TDD Unit Tests)", () => {
   it("should format reputation score and decimals accurately", () => {

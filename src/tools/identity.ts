@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { PublicClient, WalletClient, decodeEventLog } from "viem";
-import { CONFIG } from "../config.js";
+import { CONFIG } from "../config";
 
 export interface AgentCard {
   name: string;
