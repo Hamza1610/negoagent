@@ -3,10 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
-  Bot,
   Play,
   RotateCcw,
-  Sparkles,
   ChevronRight,
   ShieldCheck,
   Zap,
@@ -21,9 +19,13 @@ import {
   Activity,
   Layers,
   Settings2,
-  FileCode,
-  Share2,
-  Move
+  Move,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  PanelRightClose,
+  PanelRightOpen,
+  SlidersHorizontal
 } from "lucide-react";
 
 interface AgentProfile {
@@ -52,7 +54,7 @@ interface TranscriptMessage {
   timestamp: number;
 }
 
-export default function WorkbenchStudioPage() {
+export default function WorkbenchPage() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [paletteFilter, setPaletteFilter] = useState<"ALL" | "BUYER" | "SELLER">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,8 +64,14 @@ export default function WorkbenchStudioPage() {
   const [sellerNode, setSellerNode] = useState<AgentProfile | null>(null);
 
   // Node Canvas Coordinates
-  const [buyerPos, setBuyerPos] = useState({ x: 50, y: 120 });
-  const [sellerPos, setSellerPos] = useState({ x: 480, y: 120 });
+  const [buyerPos, setBuyerPos] = useState({ x: 60, y: 100 });
+  const [sellerPos, setSellerPos] = useState({ x: 420, y: 100 });
+
+  // Canvas Zoom State
+  const [zoom, setZoom] = useState(1);
+
+  // Inspector Collapsible State
+  const [inspectorOpen, setInspectorOpen] = useState(true);
 
   // Dragging State
   const [draggingTarget, setDraggingTarget] = useState<"BUYER" | "SELLER" | null>(null);
@@ -99,7 +107,6 @@ export default function WorkbenchStudioPage() {
         const data = await res.json();
         if (data.success && data.agents?.length > 0) {
           setAgents(data.agents);
-          // Set default pair
           const defaultBuyer = data.agents.find((a: AgentProfile) => a.role === "BUYER");
           const defaultSeller = data.agents.find((a: AgentProfile) => a.role === "SELLER");
           if (defaultBuyer) setBuyerNode(defaultBuyer);
@@ -118,27 +125,31 @@ export default function WorkbenchStudioPage() {
     setDraggingTarget(target);
     const pos = target === "BUYER" ? buyerPos : sellerPos;
     dragOffset.current = {
-      x: e.clientX - pos.x,
-      y: e.clientY - pos.y,
+      x: e.clientX / zoom - pos.x,
+      y: e.clientY / zoom - pos.y,
     };
   };
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!draggingTarget || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const newX = Math.max(10, Math.min(e.clientX - dragOffset.current.x, rect.width - 290));
-    const newY = Math.max(10, Math.min(e.clientY - dragOffset.current.y, rect.height - 240));
+    const newX = Math.max(10, e.clientX / zoom - dragOffset.current.x);
+    const newY = Math.max(10, e.clientY / zoom - dragOffset.current.y);
 
     if (draggingTarget === "BUYER") {
       setBuyerPos({ x: newX, y: newY });
     } else {
       setSellerPos({ x: newX, y: newY });
     }
-  }, [draggingTarget]);
+  }, [draggingTarget, zoom]);
 
   const handleMouseUp = useCallback(() => {
     setDraggingTarget(null);
   }, []);
+
+  // Zoom Controls
+  const handleZoomIn = () => setZoom((z) => Math.min(1.4, parseFloat((z + 0.1).toFixed(1))));
+  const handleZoomOut = () => setZoom((z) => Math.max(0.6, parseFloat((z - 0.1).toFixed(1))));
+  const handleResetZoom = () => setZoom(1);
 
   // Deploy an Agent from Palette to Canvas
   const deployToCanvas = (agent: AgentProfile) => {
@@ -180,7 +191,7 @@ export default function WorkbenchStudioPage() {
     }
   };
 
-  // Run Turn-by-Turn Negotiation
+  // Run Step-by-Step Turn
   const executeNextTurn = async () => {
     if (!buyerNode || !sellerNode || isProcessing) return;
 
@@ -234,7 +245,6 @@ export default function WorkbenchStudioPage() {
   const runFullSimulation = async () => {
     if (!buyerNode || !sellerNode || isProcessing) return;
 
-    // Reset runtime
     setRound(0);
     setTurn("BUYER");
     setCurrentOffer(null);
@@ -288,7 +298,6 @@ export default function WorkbenchStudioPage() {
           break;
         }
 
-        // 600ms latency simulation to mirror Monad block time
         await new Promise((r) => setTimeout(r, 600));
       }
 
@@ -324,7 +333,6 @@ export default function WorkbenchStudioPage() {
     downloadAnchor.remove();
   };
 
-  // Filtered palette
   const filteredPalette = agents.filter((a) => {
     if (paletteFilter !== "ALL" && a.role !== paletteFilter) return false;
     if (searchQuery.trim()) {
@@ -334,21 +342,21 @@ export default function WorkbenchStudioPage() {
   });
 
   // Calculate SVG Wire Bezier Path
-  const wireStart = { x: buyerPos.x + 280, y: buyerPos.y + 75 };
-  const wireEnd = { x: sellerPos.x, y: sellerPos.y + 75 };
-  const controlPoint1 = { x: wireStart.x + Math.max(50, (wireEnd.x - wireStart.x) / 2), y: wireStart.y };
-  const controlPoint2 = { x: wireEnd.x - Math.max(50, (wireEnd.x - wireStart.x) / 2), y: wireEnd.y };
+  const wireStart = { x: buyerPos.x + 220, y: buyerPos.y + 60 };
+  const wireEnd = { x: sellerPos.x, y: sellerPos.y + 60 };
+  const controlPoint1 = { x: wireStart.x + Math.max(40, (wireEnd.x - wireStart.x) / 2), y: wireStart.y };
+  const controlPoint2 = { x: wireEnd.x - Math.max(40, (wireEnd.x - wireStart.x) / 2), y: wireEnd.y };
   const wireMidpoint = { x: (wireStart.x + wireEnd.x) / 2, y: (wireStart.y + wireEnd.y) / 2 };
   const bezierPath = `M ${wireStart.x} ${wireStart.y} C ${controlPoint1.x} ${controlPoint1.y}, ${controlPoint2.x} ${controlPoint2.y}, ${wireEnd.x} ${wireEnd.y}`;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 64px)", background: "var(--bg-base)", overflow: "hidden" }}>
+    <div className="workbench-studio" style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 64px)", background: "var(--bg-base)", overflow: "hidden", position: "relative" }}>
       {/* Studio Header Bar */}
       <div 
         style={{ 
-          height: "54px", 
+          height: "52px", 
           borderBottom: "1px solid var(--border-subtle)", 
-          padding: "0 1.5rem", 
+          padding: "0 1.25rem", 
           display: "flex", 
           alignItems: "center", 
           justifyContent: "space-between", 
@@ -356,54 +364,74 @@ export default function WorkbenchStudioPage() {
           zIndex: 20
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--text-main)" }}>
-              Visual Simulation Studio
-            </span>
-            <span style={{ fontSize: "0.7rem", padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", background: "rgba(255, 255, 255, 0.06)", color: "var(--text-muted)" }}>
-              Polar Engine
-            </span>
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--text-main)" }}>
+            Workbench
+          </span>
 
           <div style={{ width: "1px", height: "16px", background: "var(--border-subtle)" }} />
 
           {/* Deal Config Inputs */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.8rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "0.8rem" }}>
             <span style={{ color: "var(--text-muted)" }}>Target Asset:</span>
             <input 
               type="text" 
               value={itemDescription} 
               onChange={(e) => setItemDescription(e.target.value)}
-              style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-main)", padding: "0.25rem 0.6rem", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", width: "260px" }}
+              style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-main)", padding: "0.2rem 0.5rem", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", width: "240px" }}
             />
             <span style={{ color: "var(--text-muted)" }}>Anchor:</span>
             <input 
               type="text" 
               value={referencePrice} 
               onChange={(e) => setReferencePrice(e.target.value)}
-              style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-main)", padding: "0.25rem 0.6rem", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", width: "70px", fontFamily: "var(--font-mono)" }}
+              style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", color: "var(--text-main)", padding: "0.2rem 0.5rem", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", width: "65px", fontFamily: "var(--font-mono)" }}
             />
             <span style={{ color: "var(--text-muted)" }}>MON</span>
           </div>
         </div>
 
-        {/* Right Controls */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        {/* Right Toolbar Controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          {/* Zoom Controls */}
+          <div style={{ display: "flex", alignItems: "center", background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "2px" }}>
+            <button 
+              onClick={handleZoomOut} 
+              title="Zoom Out"
+              style={{ background: "none", border: "none", color: "var(--text-secondary)", padding: "4px 6px", cursor: "pointer", display: "flex", alignItems: "center" }}
+            >
+              <ZoomOut size={13} />
+            </button>
+            <button 
+              onClick={handleResetZoom} 
+              title="Reset Zoom (100%)"
+              style={{ background: "none", border: "none", color: "var(--text-main)", fontSize: "0.75rem", fontFamily: "var(--font-mono)", padding: "2px 6px", cursor: "pointer" }}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button 
+              onClick={handleZoomIn} 
+              title="Zoom In"
+              style={{ background: "none", border: "none", color: "var(--text-secondary)", padding: "4px 6px", cursor: "pointer", display: "flex", alignItems: "center" }}
+            >
+              <ZoomIn size={13} />
+            </button>
+          </div>
+
           <button 
             onClick={resetCanvas} 
             disabled={isProcessing}
             className="btn btn-secondary" 
-            style={{ padding: "0.4rem 0.75rem", fontSize: "0.8rem" }}
+            style={{ padding: "0.35rem 0.65rem", fontSize: "0.8rem" }}
           >
-            <RotateCcw size={13} /> Reset
+            <RotateCcw size={12} /> Reset
           </button>
 
           <button 
             onClick={executeNextTurn} 
             disabled={isProcessing || status === "Settled" || status === "Failed"}
             className="btn btn-secondary" 
-            style={{ padding: "0.4rem 0.75rem", fontSize: "0.8rem" }}
+            style={{ padding: "0.35rem 0.65rem", fontSize: "0.8rem" }}
           >
             Step Turn
           </button>
@@ -412,26 +440,37 @@ export default function WorkbenchStudioPage() {
             onClick={runFullSimulation} 
             disabled={isProcessing || !buyerNode || !sellerNode}
             className="btn btn-primary" 
-            style={{ padding: "0.4rem 1rem", fontSize: "0.8rem" }}
+            style={{ padding: "0.35rem 0.85rem", fontSize: "0.8rem" }}
           >
             {isProcessing ? (
-              <>Running Qwen on Monad...</>
+              <>Simulating...</>
             ) : (
               <>
-                <Play size={13} fill="#090a0f" /> Run Autonomous Bargain
+                <Play size={12} fill="#050b14" /> Run Bargain
               </>
             )}
+          </button>
+
+          {/* Collapsible Inspector Toggle Button */}
+          <button
+            onClick={() => setInspectorOpen(!inspectorOpen)}
+            className="btn btn-secondary"
+            style={{ padding: "0.35rem 0.65rem", fontSize: "0.8rem", color: inspectorOpen ? "var(--cyan-primary)" : "var(--text-secondary)" }}
+            title={inspectorOpen ? "Collapse Inspector" : "Open Inspector"}
+          >
+            {inspectorOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+            <span style={{ fontSize: "0.75rem" }}>Inspector</span>
           </button>
         </div>
       </div>
 
-      {/* Main 3-Pane Body */}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      {/* Main Studio Body */}
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
         
         {/* LEFT PANE: Agent Palette */}
         <div 
           style={{ 
-            width: "290px", 
+            width: "270px", 
             borderRight: "1px solid var(--border-subtle)", 
             background: "var(--bg-surface)", 
             display: "flex", 
@@ -440,48 +479,48 @@ export default function WorkbenchStudioPage() {
           }}
         >
           {/* Palette Header */}
-          <div style={{ padding: "1rem", borderBottom: "1px solid var(--border-subtle)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-              <span style={{ fontSize: "0.8rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>
+          <div style={{ padding: "0.85rem", borderBottom: "1px solid var(--border-subtle)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>
                 Agent Library
               </span>
               <button 
                 onClick={() => setShowCreateModal(true)} 
                 className="btn btn-cyan" 
-                style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
+                style={{ padding: "0.2rem 0.5rem", fontSize: "0.7rem" }}
               >
-                <Plus size={12} /> New Agent
+                <Plus size={11} /> New Agent
               </button>
             </div>
 
             {/* Search Input */}
             <div style={{ position: "relative", marginBottom: "0.5rem" }}>
-              <Search size={14} color="var(--text-muted)" style={{ position: "absolute", left: "8px", top: "8px" }} />
+              <Search size={13} color="var(--text-muted)" style={{ position: "absolute", left: "8px", top: "7px" }} />
               <input 
                 type="text" 
                 placeholder="Search agents..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ width: "100%", background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.35rem 0.5rem 0.35rem 1.75rem", fontSize: "0.8rem", color: "var(--text-main)" }}
+                style={{ width: "100%", background: "var(--bg-surface-elevated)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.3rem 0.5rem 0.3rem 1.6rem", fontSize: "0.75rem", color: "var(--text-main)" }}
               />
             </div>
 
             {/* Filter Tabs */}
-            <div style={{ display: "flex", gap: "0.25rem" }}>
+            <div style={{ display: "flex", gap: "0.2rem" }}>
               {(["ALL", "BUYER", "SELLER"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setPaletteFilter(tab)}
                   style={{
                     flex: 1,
-                    padding: "0.25rem",
+                    padding: "0.2rem",
                     fontSize: "0.7rem",
                     borderRadius: "var(--radius-sm)",
                     border: "none",
                     background: paletteFilter === tab ? "var(--bg-surface-hover)" : "transparent",
                     color: paletteFilter === tab ? "var(--text-main)" : "var(--text-muted)",
                     cursor: "pointer",
-                    fontWeight: 500
+                    fontWeight: 600
                   }}
                 >
                   {tab}
@@ -491,7 +530,7 @@ export default function WorkbenchStudioPage() {
           </div>
 
           {/* Agent Palette List */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "0.6rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             {filteredPalette.map((agent) => {
               const isBuyer = agent.role === "BUYER";
               const isDeployed = (isBuyer && buyerNode?.id === agent.id) || (!isBuyer && sellerNode?.id === agent.id);
@@ -503,25 +542,25 @@ export default function WorkbenchStudioPage() {
                     background: "var(--bg-card)",
                     border: `1px solid ${isDeployed ? (isBuyer ? "var(--buyer-cyan)" : "var(--seller-violet)") : "var(--border-subtle)"}`,
                     borderRadius: "var(--radius-sm)",
-                    padding: "0.75rem",
+                    padding: "0.65rem",
                     display: "flex",
                     flexDirection: "column",
-                    gap: "0.4rem",
+                    gap: "0.35rem",
                     transition: "all 0.15s ease"
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ fontSize: "1.1rem" }}>{agent.avatar}</span>
-                      <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-main)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <span style={{ fontSize: "1rem" }}>{agent.avatar}</span>
+                      <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-main)" }}>
                         {agent.name}
                       </span>
                     </div>
                     <span 
                       style={{ 
                         fontSize: "0.65rem", 
-                        fontWeight: 600, 
-                        padding: "0.1rem 0.4rem", 
+                        fontWeight: 700, 
+                        padding: "0.1rem 0.35rem", 
                         borderRadius: "var(--radius-full)",
                         background: isBuyer ? "var(--buyer-cyan-bg)" : "var(--seller-violet-bg)",
                         color: isBuyer ? "var(--buyer-cyan)" : "var(--seller-violet)"
@@ -531,29 +570,29 @@ export default function WorkbenchStudioPage() {
                     </span>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                     <span>Target: {agent.targetPrice} MON</span>
                     <span>{isBuyer ? `Ceil: ${agent.reservationPrice}` : `Floor: ${agent.reservationPrice}`}</span>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.2rem" }}>
-                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "capitalize" }}>
-                      Strategy: {agent.strategy}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.15rem" }}>
+                    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "capitalize" }}>
+                      {agent.strategy}
                     </span>
                     <button
                       onClick={() => deployToCanvas(agent)}
                       style={{
-                        background: isDeployed ? "rgba(255, 255, 255, 0.05)" : "var(--bg-surface-elevated)",
+                        background: isDeployed ? "rgba(255, 255, 255, 0.04)" : "var(--bg-surface-elevated)",
                         border: "1px solid var(--border-subtle)",
                         color: isDeployed ? "var(--status-emerald)" : "var(--text-main)",
-                        padding: "0.2rem 0.5rem",
+                        padding: "0.15rem 0.45rem",
                         borderRadius: "var(--radius-sm)",
-                        fontSize: "0.7rem",
+                        fontSize: "0.68rem",
                         cursor: "pointer",
-                        fontWeight: 500
+                        fontWeight: 600
                       }}
                     >
-                      {isDeployed ? "✓ Deployed" : "+ Place on Canvas"}
+                      {isDeployed ? "✓ Deployed" : "+ Add to Canvas"}
                     </button>
                   </div>
                 </div>
@@ -562,7 +601,7 @@ export default function WorkbenchStudioPage() {
           </div>
         </div>
 
-        {/* CENTER PANE: Interactive Visual Dot-Grid Canvas */}
+        {/* CENTER PANE: Interactive Dot-Grid Canvas with Zoom Container */}
         <div 
           ref={canvasRef}
           className="canvas-grid"
@@ -570,320 +609,331 @@ export default function WorkbenchStudioPage() {
           onMouseUp={handleMouseUp}
           style={{ flex: 1, position: "relative", cursor: draggingTarget ? "grabbing" : "default" }}
         >
-          {/* SVG Connection Wire Layer */}
-          {buyerNode && sellerNode && (
-            <svg 
-              style={{ 
-                position: "absolute", 
-                inset: 0, 
-                width: "100%", 
-                height: "100%", 
-                pointerEvents: "none",
-                zIndex: 5
-              }}
-            >
-              {/* Drop Shadow Wire */}
-              <path 
-                d={bezierPath} 
-                fill="none" 
-                stroke="rgba(0, 0, 0, 0.5)" 
-                strokeWidth="5" 
-              />
-              {/* Base Connection Line */}
-              <path 
-                d={bezierPath} 
-                fill="none" 
-                stroke="rgba(255, 255, 255, 0.2)" 
-                strokeWidth="2" 
-              />
-              {/* Active Pulse Animation Wire */}
-              {status === "Negotiating" && (
-                <path 
-                  d={bezierPath} 
-                  fill="none" 
-                  stroke={turn === "BUYER" ? "var(--buyer-cyan)" : "var(--seller-violet)"} 
-                  strokeWidth="2.5" 
-                  className="wire-animated"
-                />
-              )}
-            </svg>
-          )}
+          {/* Zoomable Content Layer */}
+          <div 
+            style={{ 
+              width: "100%", 
+              height: "100%", 
+              position: "relative",
+              transform: `scale(${zoom})`,
+              transformOrigin: "top left",
+              transition: draggingTarget ? "none" : "transform 0.1s ease-out"
+            }}
+          >
+            {/* SVG Connection Wire */}
+            {buyerNode && sellerNode && (
+              <svg 
+                style={{ 
+                  position: "absolute", 
+                  inset: 0, 
+                  width: "1600px", 
+                  height: "1200px", 
+                  pointerEvents: "none",
+                  zIndex: 5
+                }}
+              >
+                {/* Shadow path */}
+                <path d={bezierPath} fill="none" stroke="rgba(0, 0, 0, 0.6)" strokeWidth="4" />
+                {/* Base wire */}
+                <path d={bezierPath} fill="none" stroke="rgba(255, 255, 255, 0.2)" strokeWidth="2" />
+                {/* Active animated pulse line */}
+                {status === "Negotiating" && (
+                  <path 
+                    d={bezierPath} 
+                    fill="none" 
+                    stroke={turn === "BUYER" ? "var(--buyer-cyan)" : "var(--seller-violet)"} 
+                    strokeWidth="2.5" 
+                    className="wire-animated"
+                  />
+                )}
+              </svg>
+            )}
 
-          {/* Midpoint Channel Badge */}
-          {buyerNode && sellerNode && (
-            <div 
-              style={{ 
-                position: "absolute", 
-                left: `${wireMidpoint.x - 70}px`, 
-                top: `${wireMidpoint.y - 16}px`, 
-                zIndex: 8,
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border-medium)",
-                borderRadius: "var(--radius-full)",
-                padding: "0.2rem 0.65rem",
-                fontSize: "0.7rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.4)",
-                pointerEvents: "none"
-              }}
-            >
+            {/* Midpoint Channel Badge */}
+            {buyerNode && sellerNode && (
               <div 
                 style={{ 
-                  width: "6px", 
-                  height: "6px", 
-                  borderRadius: "50%", 
-                  background: status === "Settled" ? "var(--status-emerald)" : status === "Negotiating" ? "var(--status-amber)" : "#64748b" 
-                }} 
-              />
-              <span style={{ color: "var(--text-main)", fontWeight: 600 }}>
-                {currentOffer ? `${currentOffer} MON` : "Channel Open"}
-              </span>
-              <span style={{ color: "var(--text-muted)" }}>• R{round}</span>
-            </div>
-          )}
-
-          {/* BUYER NODE */}
-          {buyerNode && (
-            <div 
-              className={`canvas-node ${turn === "BUYER" && status === "Negotiating" ? "selected" : ""}`}
-              style={{ left: `${buyerPos.x}px`, top: `${buyerPos.y}px` }}
-              onMouseDown={(e) => handleMouseDown(e, "BUYER")}
-            >
-              <div className="node-header" style={{ background: "var(--buyer-cyan-bg)", borderBottom: "1px solid var(--buyer-cyan-border)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <span style={{ fontSize: "1rem" }}>{buyerNode.avatar}</span>
-                  <div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)" }}>
-                      {buyerNode.name}
-                    </div>
-                    <div style={{ fontSize: "0.65rem", color: "var(--buyer-cyan)", textTransform: "uppercase", fontWeight: 600 }}>
-                      Buyer Node
-                    </div>
-                  </div>
-                </div>
-                <Move size={14} color="var(--text-muted)" />
+                  position: "absolute", 
+                  left: `${wireMidpoint.x - 65}px`, 
+                  top: `${wireMidpoint.y - 14}px`, 
+                  zIndex: 8,
+                  background: "var(--bg-surface)",
+                  border: "1px solid var(--border-medium)",
+                  borderRadius: "var(--radius-full)",
+                  padding: "0.2rem 0.55rem",
+                  fontSize: "0.7rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
+                  pointerEvents: "none"
+                }}
+              >
+                <div 
+                  style={{ 
+                    width: "6px", 
+                    height: "6px", 
+                    borderRadius: "50%", 
+                    background: status === "Settled" ? "var(--status-emerald)" : status === "Negotiating" ? "var(--status-amber)" : "#64748b" 
+                  }} 
+                />
+                <span style={{ color: "var(--text-main)", fontWeight: 700 }}>
+                  {currentOffer ? `${currentOffer} MON` : "Channel Open"}
+                </span>
+                <span style={{ color: "var(--text-muted)" }}>• R{round}</span>
               </div>
+            )}
 
-              <div className="node-body">
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", background: "var(--bg-base)", padding: "0.5rem", borderRadius: "var(--radius-sm)" }}>
-                  <div>
-                    <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Target Goal</div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)", fontFamily: "var(--font-mono)" }}>
-                      {buyerNode.targetPrice} MON
+            {/* COMPACT BUYER NODE (220px) */}
+            {buyerNode && (
+              <div 
+                className={`canvas-node ${turn === "BUYER" && status === "Negotiating" ? "selected" : ""}`}
+                style={{ left: `${buyerPos.x}px`, top: `${buyerPos.y}px` }}
+                onMouseDown={(e) => handleMouseDown(e, "BUYER")}
+              >
+                <div className="node-header" style={{ background: "var(--buyer-cyan-bg)", borderBottom: "1px solid var(--buyer-cyan-border)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <span style={{ fontSize: "0.95rem" }}>{buyerNode.avatar}</span>
+                    <div>
+                      <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-main)" }}>
+                        {buyerNode.name}
+                      </div>
+                      <div style={{ fontSize: "0.62rem", color: "var(--buyer-cyan)", textTransform: "uppercase", fontWeight: 700 }}>
+                        Buyer Node
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Ceiling BATNA</div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--status-rose)", fontFamily: "var(--font-mono)" }}>
-                      {buyerNode.reservationPrice} MON
+                  <Move size={12} color="var(--text-muted)" />
+                </div>
+
+                <div className="node-body">
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", background: "var(--bg-base)", padding: "0.4rem 0.5rem", borderRadius: "var(--radius-sm)" }}>
+                    <div>
+                      <div style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>Target</div>
+                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-main)", fontFamily: "var(--font-mono)" }}>
+                        {buyerNode.targetPrice} MON
+                      </div>
                     </div>
+                    <div>
+                      <div style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>Ceiling</div>
+                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--status-rose)", fontFamily: "var(--font-mono)" }}>
+                        {buyerNode.reservationPrice} MON
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-muted)" }}>
+                    <span>Strategy: <strong style={{ color: "var(--text-secondary)" }}>{buyerNode.strategy}</strong></span>
+                    <span>#2291</span>
                   </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                  <span>Strategy: <strong style={{ color: "var(--text-secondary)" }}>{buyerNode.strategy}</strong></span>
-                  <span>ERC-8004 #2291</span>
+                <div className="node-port port-right" title="Buyer Output Port" />
+              </div>
+            )}
+
+            {/* COMPACT SELLER NODE (220px) */}
+            {sellerNode && (
+              <div 
+                className={`canvas-node ${turn === "SELLER" && status === "Negotiating" ? "selected" : ""}`}
+                style={{ left: `${sellerPos.x}px`, top: `${sellerPos.y}px` }}
+                onMouseDown={(e) => handleMouseDown(e, "SELLER")}
+              >
+                <div className="node-port port-left" title="Seller Input Port" />
+
+                <div className="node-header" style={{ background: "var(--seller-violet-bg)", borderBottom: "1px solid var(--seller-violet-border)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                    <span style={{ fontSize: "0.95rem" }}>{sellerNode.avatar}</span>
+                    <div>
+                      <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-main)" }}>
+                        {sellerNode.name}
+                      </div>
+                      <div style={{ fontSize: "0.62rem", color: "var(--seller-violet)", textTransform: "uppercase", fontWeight: 700 }}>
+                        Seller Node
+                      </div>
+                    </div>
+                  </div>
+                  <Move size={12} color="var(--text-muted)" />
+                </div>
+
+                <div className="node-body">
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", background: "var(--bg-base)", padding: "0.4rem 0.5rem", borderRadius: "var(--radius-sm)" }}>
+                    <div>
+                      <div style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>Target</div>
+                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-main)", fontFamily: "var(--font-mono)" }}>
+                        {sellerNode.targetPrice} MON
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>Floor</div>
+                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--status-emerald)", fontFamily: "var(--font-mono)" }}>
+                        {sellerNode.reservationPrice} MON
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-muted)" }}>
+                    <span>Strategy: <strong style={{ color: "var(--text-secondary)" }}>{sellerNode.strategy}</strong></span>
+                    <span>#2292</span>
+                  </div>
                 </div>
               </div>
+            )}
+          </div>
 
-              {/* Output Connection Port */}
-              <div className="node-port port-right" title="Buyer Output Port" />
-            </div>
-          )}
-
-          {/* SELLER NODE */}
-          {sellerNode && (
-            <div 
-              className={`canvas-node ${turn === "SELLER" && status === "Negotiating" ? "selected" : ""}`}
-              style={{ left: `${sellerPos.x}px`, top: `${sellerPos.y}px` }}
-              onMouseDown={(e) => handleMouseDown(e, "SELLER")}
-            >
-              {/* Input Connection Port */}
-              <div className="node-port port-left" title="Seller Input Port" />
-
-              <div className="node-header" style={{ background: "var(--seller-violet-bg)", borderBottom: "1px solid var(--seller-violet-border)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <span style={{ fontSize: "1rem" }}>{sellerNode.avatar}</span>
-                  <div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)" }}>
-                      {sellerNode.name}
-                    </div>
-                    <div style={{ fontSize: "0.65rem", color: "var(--seller-violet)", textTransform: "uppercase", fontWeight: 600 }}>
-                      Seller Node
-                    </div>
-                  </div>
-                </div>
-                <Move size={14} color="var(--text-muted)" />
-              </div>
-
-              <div className="node-body">
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", background: "var(--bg-base)", padding: "0.5rem", borderRadius: "var(--radius-sm)" }}>
-                  <div>
-                    <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Target Goal</div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)", fontFamily: "var(--font-mono)" }}>
-                      {sellerNode.targetPrice} MON
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Floor BATNA</div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--status-emerald)", fontFamily: "var(--font-mono)" }}>
-                      {sellerNode.reservationPrice} MON
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                  <span>Strategy: <strong style={{ color: "var(--text-secondary)" }}>{sellerNode.strategy}</strong></span>
-                  <span>ERC-8004 #2292</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Empty state hint */}
+          {/* Empty state prompt */}
           {(!buyerNode || !sellerNode) && (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "0.9rem" }}>
-              Click "+ Place on Canvas" on a Buyer and Seller in the left palette to construct the simulation channel.
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              Click "+ Add to Canvas" on a Buyer and Seller in the left palette to link the negotiation channel.
             </div>
           )}
         </div>
 
-        {/* RIGHT PANE: Polar Inspector Panel */}
-        <div 
-          style={{ 
-            width: "380px", 
-            borderLeft: "1px solid var(--border-subtle)", 
-            background: "var(--bg-surface)", 
-            display: "flex", 
-            flexDirection: "column",
-            zIndex: 10
-          }}
-        >
-          {/* Inspector Header */}
-          <div style={{ padding: "1rem", borderBottom: "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-main)" }}>
-                Telemetry & Cognitive Inspector
+        {/* RIGHT PANE: Collapsible Telemetry & Cognitive Inspector */}
+        {inspectorOpen && (
+          <div 
+            style={{ 
+              width: "360px", 
+              borderLeft: "1px solid var(--border-subtle)", 
+              background: "var(--bg-surface)", 
+              display: "flex", 
+              flexDirection: "column",
+              zIndex: 10
+            }}
+          >
+            {/* Inspector Header */}
+            <div style={{ padding: "0.85rem 1rem", borderBottom: "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-main)" }}>
+                  Telemetry & Reasoning Inspector
+                </div>
+                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                  {status === "Settled" ? "Consensus Finalized On-Chain" : status === "Negotiating" ? "Live Strategic Reasoning" : "Channel Ready"}
+                </div>
               </div>
-              <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                {status === "Settled" ? "Consensus Finalized On-Chain" : status === "Negotiating" ? "Live Multi-Turn Reasoning" : "Channel Ready"}
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                {transcript.length > 0 && (
+                  <button 
+                    onClick={exportTranscriptJson} 
+                    className="btn btn-secondary" 
+                    style={{ padding: "0.2rem 0.45rem", fontSize: "0.7rem" }}
+                    title="Export session JSON"
+                  >
+                    <Download size={12} />
+                  </button>
+                )}
+                <button 
+                  onClick={() => setInspectorOpen(false)}
+                  style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center" }}
+                  title="Close Inspector"
+                >
+                  <X size={15} />
+                </button>
               </div>
             </div>
 
-            {transcript.length > 0 && (
-              <button 
-                onClick={exportTranscriptJson} 
-                className="btn btn-secondary" 
-                style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                title="Export session JSON"
-              >
-                <Download size={13} /> Export
-              </button>
+            {/* Settlement Callout */}
+            {status === "Settled" && (
+              <div style={{ margin: "0.75rem", padding: "0.75rem", background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "var(--radius-sm)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--status-emerald)", fontWeight: 700, fontSize: "0.8rem", marginBottom: "0.2rem" }}>
+                  <CheckCircle2 size={15} /> Deal Settled at {currentOffer} MON
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                  Escrow finalized on <code>Negotiation.sol</code> after {round} round(s).
+                </div>
+                {finalTxHash && (
+                  <a 
+                    href={`https://testnet.monadscan.com/tx/${finalTxHash}`} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.72rem", color: "var(--cyan-primary)", marginTop: "0.3rem", fontFamily: "var(--font-mono)" }}
+                  >
+                    Monadscan Receipt <ExternalLink size={11} />
+                  </a>
+                )}
+              </div>
             )}
-          </div>
 
-          {/* Settlement Callout */}
-          {status === "Settled" && (
-            <div style={{ margin: "1rem", padding: "0.85rem", background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "var(--radius-sm)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--status-emerald)", fontWeight: 700, fontSize: "0.85rem", marginBottom: "0.25rem" }}>
-                <CheckCircle2 size={16} /> Deal Settled at {currentOffer} MON
-              </div>
-              <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                Escrow finalized on <code>Negotiation.sol</code> after {round} round(s).
-              </div>
-              {finalTxHash && (
-                <a 
-                  href={`https://testnet.monadscan.com/tx/${finalTxHash}`} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.75rem", color: "var(--buyer-cyan)", marginTop: "0.4rem", fontFamily: "var(--font-mono)" }}
-                >
-                  Monadscan Receipt <ExternalLink size={11} />
-                </a>
+            {/* Transcript Dialogue & Qwen Reasoning Streams */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {transcript.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                  Click <strong>"Run Bargain"</strong> in the top toolbar to begin multi-turn negotiation and inspect Qwen's latent reasoning stream.
+                </div>
+              ) : (
+                transcript.map((msg, idx) => {
+                  const isBuyer = msg.senderRole === "BUYER";
+                  return (
+                    <div 
+                      key={msg.id || idx}
+                      style={{
+                        background: "var(--bg-card)",
+                        border: `1px solid ${isBuyer ? "rgba(0, 242, 254, 0.2)" : "rgba(139, 92, 246, 0.2)"}`,
+                        borderRadius: "var(--radius-sm)",
+                        padding: "0.65rem",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.35rem"
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span 
+                          style={{ 
+                            fontSize: "0.65rem", 
+                            fontWeight: 700, 
+                            padding: "0.1rem 0.35rem", 
+                            borderRadius: "var(--radius-sm)",
+                            background: isBuyer ? "var(--buyer-cyan-bg)" : "var(--seller-violet-bg)",
+                            color: isBuyer ? "var(--buyer-cyan)" : "var(--seller-violet)"
+                          }}
+                        >
+                          {msg.senderRole} • {msg.agentName}
+                        </span>
+                        <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
+                          Turn #{idx + 1}
+                        </span>
+                      </div>
+
+                      {/* Qwen Latent Thought Stream */}
+                      {msg.thought && (
+                        <div 
+                          style={{
+                            background: "var(--bg-base)",
+                            borderLeft: "2px solid var(--buyer-cyan)",
+                            padding: "0.35rem 0.5rem",
+                            borderRadius: "2px",
+                            fontSize: "0.72rem",
+                            color: "#cbd5e1",
+                            fontFamily: "var(--font-mono)",
+                            lineHeight: 1.35
+                          }}
+                        >
+                          <div style={{ fontSize: "0.62rem", color: "var(--buyer-cyan)", fontWeight: 700, marginBottom: "0.15rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                            <BrainCircuit size={11} /> QWEN 3.8 MAX REASONING:
+                          </div>
+                          {msg.thought}
+                        </div>
+                      )}
+
+                      {/* Natural Dialogue Utterance */}
+                      <div style={{ fontSize: "0.8rem", color: "var(--text-main)", lineHeight: 1.4 }}>
+                        "{msg.content}"
+                      </div>
+
+                      {/* Action pill */}
+                      {msg.toolCall && (
+                        <div style={{ fontSize: "0.68rem", color: "var(--amber-primary)", fontFamily: "var(--font-mono)", alignSelf: "flex-start", background: "rgba(245, 158, 11, 0.08)", padding: "0.1rem 0.35rem", borderRadius: "2px" }}>
+                          action: {msg.toolCall.name}({JSON.stringify(msg.toolCall.args)})
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
-          )}
-
-          {/* Transcript Dialogue & Qwen Reasoning Streams */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-            {transcript.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                Click <strong>"Run Autonomous Bargain"</strong> in the top toolbar to start multi-turn negotiation and inspect Qwen's strategic thoughts.
-              </div>
-            ) : (
-              transcript.map((msg, idx) => {
-                const isBuyer = msg.senderRole === "BUYER";
-                return (
-                  <div 
-                    key={msg.id || idx}
-                    style={{
-                      background: "var(--bg-card)",
-                      border: `1px solid ${isBuyer ? "rgba(6, 182, 212, 0.2)" : "rgba(139, 92, 246, 0.2)"}`,
-                      borderRadius: "var(--radius-sm)",
-                      padding: "0.75rem",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.4rem"
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span 
-                        style={{ 
-                          fontSize: "0.65rem", 
-                          fontWeight: 700, 
-                          padding: "0.1rem 0.4rem", 
-                          borderRadius: "var(--radius-sm)",
-                          background: isBuyer ? "var(--buyer-cyan-bg)" : "var(--seller-violet-bg)",
-                          color: isBuyer ? "var(--buyer-cyan)" : "var(--seller-violet)"
-                        }}
-                      >
-                        {msg.senderRole} • {msg.agentName}
-                      </span>
-                      <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
-                        Turn #{idx + 1}
-                      </span>
-                    </div>
-
-                    {/* Qwen Latent Thought Stream (Polar Inspector Feature) */}
-                    {msg.thought && (
-                      <div 
-                        style={{
-                          background: "var(--bg-base)",
-                          borderLeft: "2px solid var(--buyer-cyan)",
-                          padding: "0.4rem 0.6rem",
-                          borderRadius: "2px",
-                          fontSize: "0.75rem",
-                          color: "#cbd5e1",
-                          fontFamily: "var(--font-mono)",
-                          lineHeight: 1.4
-                        }}
-                      >
-                        <div style={{ fontSize: "0.65rem", color: "var(--buyer-cyan)", fontWeight: 600, marginBottom: "0.2rem", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                          <BrainCircuit size={12} /> QWEN 3.8 MAX REASONING TRACE:
-                        </div>
-                        {msg.thought}
-                      </div>
-                    )}
-
-                    {/* Natural Dialogue Utterance */}
-                    <div style={{ fontSize: "0.825rem", color: "var(--text-main)", lineHeight: 1.4 }}>
-                      "{msg.content}"
-                    </div>
-
-                    {/* Action pill */}
-                    {msg.toolCall && (
-                      <div style={{ fontSize: "0.7rem", color: "var(--status-amber)", fontFamily: "var(--font-mono)", alignSelf: "flex-start", background: "rgba(245, 158, 11, 0.08)", padding: "0.15rem 0.4rem", borderRadius: "2px" }}>
-                        action: {msg.toolCall.name}({JSON.stringify(msg.toolCall.args)})
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* New Custom Agent Modal */}
@@ -904,27 +954,27 @@ export default function WorkbenchStudioPage() {
           <div 
             style={{
               width: "100%",
-              maxWidth: "460px",
+              maxWidth: "440px",
               background: "var(--bg-surface)",
               border: "1px solid var(--border-medium)",
               borderRadius: "var(--radius-md)",
-              padding: "1.5rem",
+              padding: "1.25rem",
               boxShadow: "0 20px 40px rgba(0, 0, 0, 0.6)"
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: 0, color: "var(--text-main)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: 0, color: "var(--text-main)" }}>
                 Create Custom Agent Node
               </h3>
               <button onClick={() => setShowCreateModal(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAgent} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <form onSubmit={handleCreateAgent} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
               <div>
-                <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.3rem" }}>
+                <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.25rem" }}>
                   Agent Name
                 </label>
                 <input 
@@ -933,19 +983,19 @@ export default function WorkbenchStudioPage() {
                   value={newAgentName}
                   onChange={(e) => setNewAgentName(e.target.value)}
                   required
-                  style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.5rem", color: "var(--text-main)", fontSize: "0.85rem" }}
+                  style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.45rem", color: "var(--text-main)", fontSize: "0.8rem" }}
                 />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
                 <div>
-                  <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.3rem" }}>
+                  <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.25rem" }}>
                     Role
                   </label>
                   <select
                     value={newAgentRole}
                     onChange={(e) => setNewAgentRole(e.target.value as any)}
-                    style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.5rem", color: "var(--text-main)", fontSize: "0.85rem" }}
+                    style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.45rem", color: "var(--text-main)", fontSize: "0.8rem" }}
                   >
                     <option value="BUYER">BUYER (Purchaser)</option>
                     <option value="SELLER">SELLER (Provider)</option>
@@ -953,25 +1003,25 @@ export default function WorkbenchStudioPage() {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.3rem" }}>
-                    Strategy Temperament
+                  <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.25rem" }}>
+                    Strategy
                   </label>
                   <select
                     value={newAgentStrategy}
                     onChange={(e) => setNewAgentStrategy(e.target.value)}
-                    style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.5rem", color: "var(--text-main)", fontSize: "0.85rem" }}
+                    style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.45rem", color: "var(--text-main)", fontSize: "0.8rem" }}
                   >
                     <option value="aggressive">Aggressive (Hard Anchor)</option>
-                    <option value="balanced">Balanced (Rational Concession)</option>
-                    <option value="cooperative">Cooperative (Fast Consensus)</option>
+                    <option value="balanced">Balanced (Rational)</option>
+                    <option value="cooperative">Cooperative (Fast Deal)</option>
                     <option value="concessionist">Concessionist (Elastic)</option>
                   </select>
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
                 <div>
-                  <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.3rem" }}>
+                  <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.25rem" }}>
                     Target Price (MON)
                   </label>
                   <input 
@@ -980,13 +1030,13 @@ export default function WorkbenchStudioPage() {
                     value={newAgentTarget}
                     onChange={(e) => setNewAgentTarget(e.target.value)}
                     required
-                    style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.5rem", color: "var(--text-main)", fontSize: "0.85rem", fontFamily: "var(--font-mono)" }}
+                    style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.45rem", color: "var(--text-main)", fontSize: "0.8rem", fontFamily: "var(--font-mono)" }}
                   />
                 </div>
 
                 <div>
-                  <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.3rem" }}>
-                    {newAgentRole === "BUYER" ? "Max Ceiling BATNA" : "Min Floor BATNA"} (MON)
+                  <label style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginBottom: "0.25rem" }}>
+                    {newAgentRole === "BUYER" ? "Ceiling BATNA" : "Floor BATNA"} (MON)
                   </label>
                   <input 
                     type="number" 
@@ -994,17 +1044,17 @@ export default function WorkbenchStudioPage() {
                     value={newAgentReservation}
                     onChange={(e) => setNewAgentReservation(e.target.value)}
                     required
-                    style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.5rem", color: "var(--text-main)", fontSize: "0.85rem", fontFamily: "var(--font-mono)" }}
+                    style={{ width: "100%", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0.45rem", color: "var(--text-main)", fontSize: "0.8rem", fontFamily: "var(--font-mono)" }}
                   />
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
-                <button type="button" onClick={() => setShowCreateModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>
+              <div style={{ display: "flex", gap: "0.6rem", marginTop: "0.4rem" }}>
+                <button type="button" onClick={() => setShowCreateModal(false)} className="btn btn-secondary" style={{ flex: 1, fontSize: "0.8rem" }}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                  Create & Place on Canvas
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, fontSize: "0.8rem" }}>
+                  Create & Place
                 </button>
               </div>
             </form>

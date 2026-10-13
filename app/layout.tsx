@@ -113,7 +113,7 @@ export default function RootLayout({
                 transition: "color 0.2s",
               }}
             >
-              Workbench Arena
+              Workbench
             </Link>
             <Link
               href="/workbench/agents"
@@ -180,7 +180,7 @@ export default function RootLayout({
             </div>
 
             <Link href="/workbench" className="btn btn-primary" style={{ padding: "0.4rem 0.85rem", fontSize: "0.8rem" }}>
-              Launch Studio
+              Launch Workbench
             </Link>
           </div>
         </header>

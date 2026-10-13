@@ -84,26 +84,10 @@ export default function LiveAppPage() {
     }
   }, []);
 
-  // Check if wallet is already connected safely on mount
+  // Listen for account and chain changes once connected
   useEffect(() => {
     const eth = getInjectedProvider();
     if (!eth) return;
-
-    eth.request({ method: "eth_accounts" })
-      .then((accounts: string[]) => {
-        if (accounts && accounts.length > 0) {
-          setWalletAddress(accounts[0]);
-          setIsDemoMode(false);
-          fetchBalance(accounts[0]);
-        }
-      })
-      .catch(() => {});
-
-    eth.request({ method: "eth_chainId" })
-      .then((hexChain: string) => {
-        if (hexChain) setChainId(parseInt(hexChain, 16));
-      })
-      .catch(() => {});
 
     const handleAccountsChanged = (accounts: string[]) => {
       if (accounts && accounts.length > 0) {
