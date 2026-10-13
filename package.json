@@ -1,0 +1,37 @@
+{
+  "name": "negoagent",
+  "version": "1.0.0",
+  "description": "Autonomous negotiation agent driven by Qwen 3.8 Max with ERC-8004 identity and reputation on Monad",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "tsx src/index.ts",
+    "compile": "tsx scripts/compileContract.ts",
+    "deploy": "tsx scripts/deployNegotiation.ts",
+    "check-balance": "tsx scripts/fundWallets.ts"
+  },
+  "keywords": [
+    "monad",
+    "ai-agent",
+    "erc-8004",
+    "qwen",
+    "negotiation",
+    "web3"
+  ],
+  "author": "NEGOagent Team",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "openai": "^4.86.1",
+    "solc": "^0.8.28",
+    "viem": "^2.23.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}
