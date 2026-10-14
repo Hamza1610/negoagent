@@ -130,12 +130,33 @@ export default function WorkbenchPage() {
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [finalTxHash, setFinalTxHash] = useState<string | null>(null);
+  const [isSettlingOnChain, setIsSettlingOnChain] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll Inspector to latest message
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript, isProcessing]);
+
+  // Broadcast Real On-Chain Settlement to Monad Testnet
+  const broadcastOnChainSettlement = async () => {
+    setIsSettlingOnChain(true);
+    try {
+      const res = await fetch("/api/onchain/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemDescription }),
+      });
+      const data = await res.json();
+      if (data.success && data.openTxHash) {
+        setFinalTxHash(data.openTxHash);
+      }
+    } catch (err) {
+      console.error("On-chain settlement broadcast error:", err);
+    } finally {
+      setIsSettlingOnChain(false);
+    }
+  };
 
   // Custom Agent Creator Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -496,7 +517,8 @@ export default function WorkbenchPage() {
               c.id === activeChannel.id ? { ...c, status: "settled", round: currentRoundNum } : c
             )
           );
-          setFinalTxHash(msg.txHash || `0x${Math.random().toString(16).substring(2, 66)}`);
+          setFinalTxHash(msg.txHash || null);
+          broadcastOnChainSettlement();
         } else if (msg.toolCall?.name === "reject_offer") {
           setChannels((prev) =>
             prev.map((c) => (c.id === activeChannel.id ? { ...c, status: "failed" } : c))
@@ -565,7 +587,8 @@ export default function WorkbenchPage() {
           setChannels((prev) =>
             prev.map((c) => (c.id === activeChannel.id ? { ...c, status: "settled", round: curRound } : c))
           );
-          setFinalTxHash(msg.txHash || `0x${Math.random().toString(16).substring(2, 66)}`);
+          setFinalTxHash(msg.txHash || null);
+          broadcastOnChainSettlement();
           break;
         } else if (msg.toolCall?.name === "reject_offer") {
           setChannels((prev) =>
@@ -1319,22 +1342,70 @@ export default function WorkbenchPage() {
 
             {/* Settlement Status Banner */}
             {activeChannel?.status === "settled" && (
-              <div style={{ margin: "0.65rem", padding: "0.65rem", background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "var(--radius-sm)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", color: "var(--status-emerald)", fontWeight: 700, fontSize: "0.78rem", marginBottom: "0.15rem" }}>
-                  <CheckCircle2 size={14} /> Deal Settled at {activeChannel.currentOffer} MON
+              <div style={{ margin: "0.65rem", padding: "0.75rem", background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "var(--radius-sm)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", color: "var(--status-emerald)", fontWeight: 700, fontSize: "0.8rem", marginBottom: "0.2rem" }}>
+                  <CheckCircle2 size={15} /> Deal Settled at {activeChannel.currentOffer} MON
                 </div>
-                <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>
-                  Escrow finalized on <code>Negotiation.sol</code> on Monad Testnet.
+                <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginBottom: "0.35rem" }}>
+                  Bilateral terms concluded on Monad Testnet (Chain ID 10143).
                 </div>
-                {finalTxHash && (
-                  <a 
-                    href={`https://testnet.monadscan.com/tx/${finalTxHash}`} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.7rem", color: "var(--cyan-primary)", marginTop: "0.25rem", fontFamily: "var(--font-mono)" }}
-                  >
-                    Monadscan Receipt <ExternalLink size={10} />
-                  </a>
+
+                {isSettlingOnChain ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--status-amber)", fontSize: "0.72rem", padding: "0.3rem 0" }}>
+                    <div className="spinner" style={{ width: "11px", height: "11px", border: "2px solid var(--status-amber)", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    <span>Broadcasting settlement transaction to Monad Testnet...</span>
+                  </div>
+                ) : finalTxHash ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", marginTop: "0.35rem" }}>
+                    <a 
+                      href={`https://testnet.monadscan.com/tx/${finalTxHash}`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      style={{ 
+                        display: "inline-flex", 
+                        alignItems: "center", 
+                        gap: "0.35rem", 
+                        fontSize: "0.72rem", 
+                        color: "var(--cyan-primary)", 
+                        fontFamily: "var(--font-mono)",
+                        background: "rgba(0, 242, 254, 0.08)",
+                        padding: "0.3rem 0.55rem",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid rgba(0, 242, 254, 0.25)",
+                        textDecoration: "none"
+                      }}
+                    >
+                      <ShieldCheck size={12} />
+                      Verified Monadscan Receipt: {finalTxHash.substring(0, 8)}...{finalTxHash.substring(finalTxHash.length - 6)}
+                      <ExternalLink size={10} />
+                    </a>
+                    <a 
+                      href="https://testnet.monadscan.com/address/0x37645e013f972aa79fe452b5763c8ae1c7cbee18"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ fontSize: "0.66rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.25rem" }}
+                    >
+                      Contract: 0x37645e01...cbee18 ↗
+                    </a>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.35rem" }}>
+                    <button
+                      onClick={broadcastOnChainSettlement}
+                      className="btn btn-primary"
+                      style={{ padding: "0.25rem 0.6rem", fontSize: "0.7rem", display: "flex", alignItems: "center", gap: "0.3rem" }}
+                    >
+                      <Zap size={11} /> Broadcast to Monadscan
+                    </button>
+                    <a 
+                      href="https://testnet.monadscan.com/address/0x37645e013f972aa79fe452b5763c8ae1c7cbee18"
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ fontSize: "0.66rem", color: "var(--text-muted)" }}
+                    >
+                      View Contract ↗
+                    </a>
+                  </div>
                 )}
               </div>
             )}

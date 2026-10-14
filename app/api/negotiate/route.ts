@@ -143,8 +143,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const txHash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-
     const turnMessage = {
       id: `turn_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       senderRole: turn,
@@ -155,7 +153,6 @@ export async function POST(request: Request) {
         name: toolName,
         args: toolName === "make_offer" ? { negotiationId: 1, amount: offerAmount } : { negotiationId: 1 },
       },
-      txHash,
       timestamp: Date.now(),
     };
 
