@@ -80,7 +80,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Hide global layout footer when inside the full-screen workbench studio */
+/* Hide global layout header and footer when inside the full-screen workbench studio */
+body:has(.workbench-studio) header,
 body:has(.workbench-studio) footer {
   display: none !important;
 }
